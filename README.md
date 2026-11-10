@@ -4,6 +4,9 @@ CivicResolve AI is an enterprise-grade consumer financial grievance triage and d
 
 ![CivicResolve AI Architecture](landing.png)
 
+> **Curated Technical Documentation**:<br>
+> 📖 [System Architecture & Data Flow](docs/ARCHITECTURE.md) | 🔒 [Security & Data Protection](docs/SECURITY.md) | 🧪 [Verification & Testing Guide](docs/TESTING.md) | 🧠 [ML Model Card](docs/MODEL_CARD.md)
+
 ---
 
 ## Table of Contents
@@ -155,11 +158,18 @@ product_categories")]
 ```
 CivicResolveAI/
 ├── .gitignore                          # Comprehensive multi-tier ignore policy
+├── LICENSE                             # Apache 2.0 open-source license
 ├── README.md                           # Master portfolio and operational guide
 ├── landing.png                         # Architectural overview diagram
 ├── reviewer_login.png                  # Reviewer portal preview
 ├── submit.png                          # Citizen complaint intake preview
 ├── track.png                           # Citizen complaint tracking preview
+│
+├── docs/                               # Curated technical documentation
+│   ├── ARCHITECTURE.md                 # System architecture, service boundaries & data flow
+│   ├── SECURITY.md                     # Authentication, rate limiting, and PostgreSQL least-privilege
+│   ├── TESTING.md                      # Comprehensive test guide and verified test outputs
+│   └── MODEL_CARD.md                   # Machine learning model documentation & validation benchmarks
 │
 ├── backend/                            # Spring Boot 4.1.1 API Tier
 │   ├── mvnw / mvnw.cmd                 # Maven wrapper scripts
@@ -513,4 +523,4 @@ To ensure immediate execution upon cloning, safe pre-trained model weights are i
 
 ## 15. License
 
-This project is licensed under the Apache 2.0 License.
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for the full license text.
