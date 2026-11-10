@@ -39,7 +39,7 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 - **Instant Citizen Safeguards**: Real-time pre-submission triage feedback and privacy-first narrative evaluation before submission.
 - **Explainable Linear Feature Attribution**: Deterministic n-gram token weighting that explicitly demonstrates *why* a complaint was categorized into a specific product bucket.
 - **Cryptographic Tracking Tokens**: High-entropy, one-time tracking credentials where only salted SHA-256 hashes are persisted.
-- **Flagship Decision Intelligence Lab**: A dedicated 3-Zone reviewer workbench featuring counterfactual what-if simulation, live dual-model comparison, precedent consistency analysis, and statutory audit timelines.
+- **Flagship Decision Intelligence Lab**: A dedicated 3-Zone reviewer workbench featuring counterfactual what-if simulation, live dual-model comparison, precedent consistency analysis using Lexical TF-IDF Cosine Similarity, and statutory audit timelines.
 - **Enterprise Defense-in-Depth**: Strict PostgreSQL dual-role separation (least-privilege DML vs. Flyway DDL migrator), optimistic concurrency locking (`HTTP 409`), in-memory token-bucket rate limiting, and RFC 9457 structured error handling.
 
 ---
@@ -67,7 +67,7 @@ Financial institutions handle millions of consumer complaints regarding mortgage
    - Real-time queue filtering by status (`AUTO_ROUTED`, `PENDING_REVIEW`, `UNDER_INVESTIGATION`, `RESOLVED`, `DISMISSED`) and priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
    - Optimistic concurrency control via JPA `@Version` prevents race conditions with standard `HTTP 409 Conflict`.
 3. **Decision Intelligence Lab (`/reviewer/grievances/:id`)**:
-   - Comprehensive investigation environment combining immutable case anchors, what-if narrative experimentation, live dual-model arbitration, and semantic precedent retrieval.
+   - Comprehensive investigation environment combining immutable case anchors, what-if narrative experimentation, live dual-model arbitration, and precedent retrieval via Lexical TF-IDF Cosine Similarity.
 4. **Executive Analytics & Model Audit (`/reviewer/audit`)**:
    - Real-time aggregations of category volumes, reviewer override frequencies, probability margin distributions, and model calibration metrics.
 
@@ -232,14 +232,14 @@ CivicResolve AI implements an authentic 8-category consumer financial product ta
 
 ### Primary Production Model: TF-IDF + Logistic Regression
 - **Role**: **Authoritative classifier**. It is the sole model used for automated routing and persistence upon complaint submission (`POST /api/grievances`).
-- **Vectorization**: Sublinear term-frequency scaling, n-gram range `(1, 2)`, min document frequency 5, max features 25,000.
+- **Vectorization**: Sublinear term-frequency scaling, n-gram range `(1, 2)`, min document frequency 5, max features 50,000.
 - **Classifier**: Multi-class Logistic Regression with L2 regularization ($C = 1.0$), multinomial loss, balanced class weighting, L-BFGS solver.
 - **Footprint & Speed**: ~5.02 MB serialized footprint, $< 15\text{ ms}$ single-pass inference latency.
 - **Linear Attribution**: Token coefficients $\mathbf{w}_c \cdot \mathbf{x}$ provide mathematically exact, deterministic attribution shifts without stochastic Monte Carlo variance.
-- **Held-Out Test Set Metrics**:
-  - **Macro F1**: `0.831`
-  - **Weighted F1**: `0.841`
-  - **Overall Accuracy**: `84.2%`
+- **Validation Results (Stratified Validation Set, N=12,726)**:
+  - **Macro F1**: `0.7453`
+  - **Weighted F1**: `0.8455`
+  - **Accuracy**: `83.80%`
 
 ### Challenger Benchmark Model: Bidirectional LSTM (PyTorch)
 - **Role**: **Reviewer-only challenger**. Operates strictly inside the reviewer workspace to provide a second opinion; it never performs autonomous routing.
@@ -250,6 +250,10 @@ CivicResolve AI implements an authentic 8-category consumer financial product ta
   - Classification Head: Dense linear projection to 8 logits followed by Softmax.
 - **Footprint**: ~34.33 MB PyTorch state dictionary checkpoint (`bilstm_best.pt`).
 - **Utility**: Evaluates complex syntactic dependencies and captures context in verbose narratives where n-gram linear models exhibit uncertainty.
+- **Validation Results (Stratified Validation Set, N=12,726)**:
+  - **Macro F1**: `0.7067`
+  - **Weighted F1**: `0.8230`
+  - **Accuracy**: `81.24%`
 
 ### AI Ethics & Terminology Standards
 All model probability estimates in CivicResolve AI are explicitly presented as:
@@ -313,6 +317,7 @@ The reviewer interface (`/reviewer/grievances/:id`) contains our flagship intera
    - Highlights confidence deltas vs. Zone A and verifies model provenance integrity.
    - **"Copy Replay Summary to Review Note"**: Appends markdown replay evidence to the review note safely without auto-submitting the decision.
 4. **Historical Decision Consistency Panel**:
+   - Retrieves top historical precedents ranked via Lexical TF-IDF Cosine Similarity.
    - Computes category agreement independently of administrative workflow status.
    - Accurately accounts for priority-only overrides (`OVERRIDDEN` where `predictedCategory === assignedCategory`).
    - Renders an **Amber Evidence Sufficiency Warning** whenever historical sample size < 2 or max cosine similarity < 0.25.
@@ -333,7 +338,7 @@ Startup validation in `DatabaseIsolationGuard.java` verifies that `civicresolve_
 
 ### Security Defenses
 - **In-Memory Reviewer Authentication**: Spring Security HTTP Basic authentication with BCrypt-12 hashed credentials. Credentials are kept strictly in memory in the React client and are never written to `localStorage` or `sessionStorage`.
-- **Public vs. Protected Scope**: Public access is strictly restricted to `/api/grievances` (POST intake), `/api/grievances/track` (POST status check), `/api/categories`, and `/api/health`. All triage queues, reviews, and analytics require `ROLE_REVIEWER`.
+- **Public vs. Protected Scope**: Public access is strictly restricted to `/api/grievances` (POST intake), `/api/grievances/track` (POST status check), `/api/product-categories`, and `/api/health`. All triage queues, reviews, and analytics require `ROLE_REVIEWER`.
 - **One-Time Citizen Credentials**: Tracking secrets are generated via cryptographically secure randomness (`SecureRandom`). Only the salted SHA-256 hash is persisted; raw secrets are never stored or logged.
 - **Fail-Closed IP Rate Limiting**: In-memory token-bucket rate limiter with bounded capacity failing closed under load, defending against tracking enumeration attacks.
 - **Optimistic Concurrency Locking**: Entity `@Version` field on `Grievance` prevents review race conditions, returning `409 Conflict` (RFC 9457) when concurrent modifications occur.
