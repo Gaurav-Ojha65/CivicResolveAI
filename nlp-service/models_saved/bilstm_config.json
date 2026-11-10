@@ -1,0 +1,32 @@
+{
+  "model_architecture": "BiLSTMClassifier (Bidirectional LSTM with Masked Pooling)",
+  "framework": "PyTorch",
+  "torch_version": "2.14.1+cu126",
+  "device": "cuda",
+  "device_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "vocab_size": 21100,
+  "max_seq_len": 250,
+  "train_truncation_rate": 0.238,
+  "val_truncation_rate": 0.2341,
+  "embedding_dim": 128,
+  "hidden_dim": 128,
+  "num_layers": 1,
+  "dropout": 0.3,
+  "batch_size": 128,
+  "epochs_trained": 8,
+  "best_epoch": 5,
+  "total_params": 2998920,
+  "learning_rate": 0.001,
+  "training_duration_seconds": 88.61,
+  "random_seed": 42,
+  "labels": [
+    "Credit reporting or other personal consumer reports",
+    "Debt collection",
+    "Credit card",
+    "Checking or savings account",
+    "Money transfer, virtual currency, or money service",
+    "Mortgage",
+    "Student loan",
+    "Vehicle loan or lease"
+  ]
+}

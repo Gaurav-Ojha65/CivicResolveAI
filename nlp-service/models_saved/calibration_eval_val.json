@@ -1,0 +1,211 @@
+{
+  "evaluation_dataset": "val.csv (50/50 Stratified Split, random_state=42)",
+  "evaluation_date_utc": "2026-11-09T19:49:18.378007+00:00",
+  "total_validation_rows": 12726,
+  "calibration_fit_rows": 6363,
+  "calibration_eval_rows": 6363,
+  "classes": [
+    "Checking or savings account",
+    "Credit card",
+    "Credit reporting or other personal consumer reports",
+    "Debt collection",
+    "Money transfer, virtual currency, or money service",
+    "Mortgage",
+    "Student loan",
+    "Vehicle loan or lease"
+  ],
+  "optimal_temperature": 0.7866,
+  "uncalibrated_ece": 0.0609,
+  "calibrated_ece": 0.0306,
+  "ece_reduction_percent": 49.75,
+  "uncalibrated_mce": 0.1999,
+  "calibrated_mce": 0.0814,
+  "uncalibrated_brier": 0.259,
+  "calibrated_brier": 0.2512,
+  "brier_reduction_percent": 3.01,
+  "uncalibrated_bins": [
+    {
+      "bin_index": 1,
+      "bin_lower": 0.0,
+      "bin_upper": 0.1,
+      "bin_center": 0.05,
+      "sample_count": 0,
+      "empirical_accuracy": 0.0,
+      "mean_confidence": 0.05
+    },
+    {
+      "bin_index": 2,
+      "bin_lower": 0.1,
+      "bin_upper": 0.2,
+      "bin_center": 0.15,
+      "sample_count": 1,
+      "empirical_accuracy": 0.0,
+      "mean_confidence": 0.1999
+    },
+    {
+      "bin_index": 3,
+      "bin_lower": 0.2,
+      "bin_upper": 0.3,
+      "bin_center": 0.25,
+      "sample_count": 129,
+      "empirical_accuracy": 0.2868,
+      "mean_confidence": 0.2642
+    },
+    {
+      "bin_index": 4,
+      "bin_lower": 0.3,
+      "bin_upper": 0.4,
+      "bin_center": 0.35,
+      "sample_count": 275,
+      "empirical_accuracy": 0.5127,
+      "mean_confidence": 0.353
+    },
+    {
+      "bin_index": 5,
+      "bin_lower": 0.4,
+      "bin_upper": 0.5,
+      "bin_center": 0.45,
+      "sample_count": 403,
+      "empirical_accuracy": 0.5806,
+      "mean_confidence": 0.4543
+    },
+    {
+      "bin_index": 6,
+      "bin_lower": 0.5,
+      "bin_upper": 0.6,
+      "bin_center": 0.55,
+      "sample_count": 531,
+      "empirical_accuracy": 0.6761,
+      "mean_confidence": 0.5543
+    },
+    {
+      "bin_index": 7,
+      "bin_lower": 0.6,
+      "bin_upper": 0.7,
+      "bin_center": 0.65,
+      "sample_count": 608,
+      "empirical_accuracy": 0.7845,
+      "mean_confidence": 0.6524
+    },
+    {
+      "bin_index": 8,
+      "bin_lower": 0.7,
+      "bin_upper": 0.8,
+      "bin_center": 0.75,
+      "sample_count": 789,
+      "empirical_accuracy": 0.8504,
+      "mean_confidence": 0.7538
+    },
+    {
+      "bin_index": 9,
+      "bin_lower": 0.8,
+      "bin_upper": 0.9,
+      "bin_center": 0.85,
+      "sample_count": 1204,
+      "empirical_accuracy": 0.9028,
+      "mean_confidence": 0.8543
+    },
+    {
+      "bin_index": 10,
+      "bin_lower": 0.9,
+      "bin_upper": 1.0,
+      "bin_center": 0.95,
+      "sample_count": 2423,
+      "empirical_accuracy": 0.9521,
+      "mean_confidence": 0.9563
+    }
+  ],
+  "calibrated_bins": [
+    {
+      "bin_index": 1,
+      "bin_lower": 0.0,
+      "bin_upper": 0.1,
+      "bin_center": 0.05,
+      "sample_count": 0,
+      "empirical_accuracy": 0.0,
+      "mean_confidence": 0.05
+    },
+    {
+      "bin_index": 2,
+      "bin_lower": 0.1,
+      "bin_upper": 0.2,
+      "bin_center": 0.15,
+      "sample_count": 0,
+      "empirical_accuracy": 0.0,
+      "mean_confidence": 0.15
+    },
+    {
+      "bin_index": 3,
+      "bin_lower": 0.2,
+      "bin_upper": 0.3,
+      "bin_center": 0.25,
+      "sample_count": 56,
+      "empirical_accuracy": 0.2321,
+      "mean_confidence": 0.2694
+    },
+    {
+      "bin_index": 4,
+      "bin_lower": 0.3,
+      "bin_upper": 0.4,
+      "bin_center": 0.35,
+      "sample_count": 178,
+      "empirical_accuracy": 0.382,
+      "mean_confidence": 0.351
+    },
+    {
+      "bin_index": 5,
+      "bin_lower": 0.4,
+      "bin_upper": 0.5,
+      "bin_center": 0.45,
+      "sample_count": 302,
+      "empirical_accuracy": 0.5364,
+      "mean_confidence": 0.455
+    },
+    {
+      "bin_index": 6,
+      "bin_lower": 0.5,
+      "bin_upper": 0.6,
+      "bin_center": 0.55,
+      "sample_count": 368,
+      "empirical_accuracy": 0.6005,
+      "mean_confidence": 0.5495
+    },
+    {
+      "bin_index": 7,
+      "bin_lower": 0.6,
+      "bin_upper": 0.7,
+      "bin_center": 0.65,
+      "sample_count": 439,
+      "empirical_accuracy": 0.6856,
+      "mean_confidence": 0.6515
+    },
+    {
+      "bin_index": 8,
+      "bin_lower": 0.7,
+      "bin_upper": 0.8,
+      "bin_center": 0.75,
+      "sample_count": 596,
+      "empirical_accuracy": 0.7819,
+      "mean_confidence": 0.7529
+    },
+    {
+      "bin_index": 9,
+      "bin_lower": 0.8,
+      "bin_upper": 0.9,
+      "bin_center": 0.85,
+      "sample_count": 903,
+      "empirical_accuracy": 0.8627,
+      "mean_confidence": 0.8562
+    },
+    {
+      "bin_index": 10,
+      "bin_lower": 0.9,
+      "bin_upper": 1.0,
+      "bin_center": 0.95,
+      "sample_count": 3521,
+      "empirical_accuracy": 0.9381,
+      "mean_confidence": 0.9682
+    }
+  ],
+  "disclaimer": "Probability calibration metrics and temperature scaling parameters are evaluated exclusively on a 50/50 stratified partition of the validation dataset (val.csv). The final test dataset (test.csv) was never accessed or evaluated."
+}

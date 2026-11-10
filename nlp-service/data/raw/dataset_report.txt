@@ -1,0 +1,67 @@
+CivicResolve AI — Phase 1 CFPB Dataset Inspection
+======================================================
+Report generated (UTC): 2026-10-20T15:48:46+00:00
+Date window requested: 2025-05-11 through 2025-06-30 (inclusive)
+Source: Local historical CFPB archive: C:\Users\gaura\OneDrive\Desktop\GrievanceGPT\CivicResolveAI\nlp-service\data\raw\cfpb_2025_may_june.zip
+Sample method: Reproducible reservoir sample (seed=42) of up to 25000 eligible records; scanned and counted 185,370 eligible records in the date interval.
+
+ROW COUNTS
+Rows inspected in sample: 25,000
+Rows with non-empty narrative AND Product: 25,000
+Rows excluded for empty narrative or Product in inspected sample: 0
+Total eligible archive rows found in date window: 185,370
+
+NULL / EMPTY RATES BY COLUMN
+Date received: null=0 (0.00%), empty_or_null=0 (0.00%)
+Product: null=0 (0.00%), empty_or_null=0 (0.00%)
+Sub-product: null=0 (0.00%), empty_or_null=0 (0.00%)
+Issue: null=0 (0.00%), empty_or_null=0 (0.00%)
+Sub-issue: null=648 (2.59%), empty_or_null=648 (2.59%)
+Consumer complaint narrative: null=0 (0.00%), empty_or_null=0 (0.00%)
+Company public response: null=11,539 (46.16%), empty_or_null=11,539 (46.16%)
+Company: null=0 (0.00%), empty_or_null=0 (0.00%)
+State: null=77 (0.31%), empty_or_null=77 (0.31%)
+ZIP code: null=0 (0.00%), empty_or_null=0 (0.00%)
+Tags: null=23,652 (94.61%), empty_or_null=23,652 (94.61%)
+Submitted via: null=0 (0.00%), empty_or_null=0 (0.00%)
+Date sent to company: null=0 (0.00%), empty_or_null=0 (0.00%)
+Company response to consumer: null=0 (0.00%), empty_or_null=0 (0.00%)
+Timely response?: null=0 (0.00%), empty_or_null=0 (0.00%)
+Complaint ID: null=0 (0.00%), empty_or_null=0 (0.00%)
+
+NARRATIVE WORD-LENGTH DISTRIBUTION (non-empty narratives with Product labels)
+Count: 25,000
+Min: 5
+Median: 119.00
+Mean: 173.83
+95th percentile: 499.00
+Max: 4721
+
+XXXX REDACTION-MASK FREQUENCY (case-insensitive literal XXXX occurrences)
+Narratives containing at least one XXXX mask: 14,540 (58.16%)
+Total XXXX occurrences: 501,748
+
+PRODUCT CLASS DISTRIBUTION (top 30 in inspected sample)
+Unique Product labels in usable sample: 11
+Coverage of top 8 Product labels: 98.94%
+Credit reporting or other personal consumer reports: 20,268 (81.07%)
+Debt collection: 1,977 (7.91%)
+Credit card: 735 (2.94%)
+Checking or savings account: 711 (2.84%)
+Money transfer, virtual currency, or money service: 369 (1.48%)
+Mortgage: 260 (1.04%)
+Student loan: 209 (0.84%)
+Vehicle loan or lease: 207 (0.83%)
+Payday loan, title loan, personal loan, or advance loan: 156 (0.62%)
+Prepaid card: 65 (0.26%)
+Debt or credit management: 43 (0.17%)
+
+DATE COVERAGE IN INSPECTED SAMPLE
+Earliest: 2025-05-11T00:00:00+00:00
+Latest: 2025-06-30T00:00:00+00:00
+
+DATA-SCOPE / INTERPRETATION NOTES
+- Product is a consumer financial product category, not a government department label.
+- Public narratives are a self-selected subset; results do not represent all complaints or all consumers.
+- Treat XXXX-mask removal as a preprocessing transformation; preserve the original archive unchanged.
+- This report describes the inspected sample, not model performance. No model has been trained in Phase 1.

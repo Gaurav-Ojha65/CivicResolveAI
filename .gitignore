@@ -1,0 +1,115 @@
+# ==============================================================================
+# CivicResolve AI — Comprehensive .gitignore
+# ==============================================================================
+
+# ── Security & Environment Variables ───────────────────────────────────────────
+.env
+.env.*
+.env.local
+.env.*.local
+*.env
+*.env.*
+*.key
+*.pem
+*.cert
+!frontend/.env.example
+backend/src/main/resources/application-local.properties
+backend/src/main/resources/application-secret*.properties
+
+# ── Datasets & Private Records (STRICT) ────────────────────────────────────────
+# Held-out test set MUST remain sealed — NEVER commit test.csv
+nlp-service/data/processed/test.csv
+nlp-service/data/processed/*.csv
+nlp-service/data/processed/split_manifest.json
+nlp-service/data/raw/*
+!nlp-service/data/raw/README.md
+!nlp-service/data/raw/dataset_report.txt
+*.zip
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# ── ML Models & Artifacts Policy ──────────────────────────────────────────────
+# Safely track required serving model & challenger weights under GitHub limits:
+# baseline_tfidf_logreg.joblib (5.02 MB) -> serving model
+# bilstm_best.pt (34.33 MB) -> challenger model
+# vocab.json, bilstm_config.json, eval reports and metrics
+nlp-service/app/models/*.pt
+nlp-service/app/models/*.pkl
+!nlp-service/models_saved/baseline_tfidf_logreg.joblib
+!nlp-service/models_saved/bilstm_best.pt
+!nlp-service/models_saved/bilstm_config.json
+!nlp-service/models_saved/vocab.json
+!nlp-service/models_saved/*.json
+!nlp-service/models_saved/*.csv
+!nlp-service/models_saved/*.png
+!nlp-service/models_saved/*.md
+
+# ── Python / Virtual Environments / Caches ─────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Java / Maven ───────────────────────────────────────────────────────────────
+backend/target/
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/timing.properties
+!backend/.mvn/wrapper/maven-wrapper.properties
+!backend/mvnw
+!backend/mvnw.cmd
+
+# ── Node / Frontend ────────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+.vite/
+frontend/.vite/
+*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Database & Application Logs ────────────────────────────────────────────────
+*.log
+backend-startup.log
+audit/logs/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+
+# ── Snapshots, Scratch & Temporary Files ───────────────────────────────────────
+scratch/
+current_repo_snapshot.txt
+phase9_source_snapshot.txt
+
+# ── IDE & Operating System ─────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.DS_Store
+Thumbs.db
+desktop.ini

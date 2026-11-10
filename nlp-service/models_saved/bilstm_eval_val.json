@@ -1,0 +1,285 @@
+{
+  "evaluated_at_utc": "2026-10-20T18:46:20+00:00",
+  "model_architecture": "BiLSTM (Bidirectional LSTM + Masked Average Pooling)",
+  "num_train_samples": 59389,
+  "num_val_samples": 12726,
+  "labels": [
+    "Credit reporting or other personal consumer reports",
+    "Debt collection",
+    "Credit card",
+    "Checking or savings account",
+    "Money transfer, virtual currency, or money service",
+    "Mortgage",
+    "Student loan",
+    "Vehicle loan or lease"
+  ],
+  "metrics": {
+    "accuracy": 0.8124,
+    "macro_f1": 0.7067,
+    "weighted_f1": 0.823,
+    "val_loss": 0.6274
+  },
+  "per_class": {
+    "Credit reporting or other personal consumer reports": {
+      "precision": 0.9621,
+      "recall": 0.8291,
+      "f1_score": 0.8906,
+      "support": 8232
+    },
+    "Debt collection": {
+      "precision": 0.6495,
+      "recall": 0.7932,
+      "f1_score": 0.7142,
+      "support": 1649
+    },
+    "Credit card": {
+      "precision": 0.6054,
+      "recall": 0.7551,
+      "f1_score": 0.672,
+      "support": 837
+    },
+    "Checking or savings account": {
+      "precision": 0.7292,
+      "recall": 0.7249,
+      "f1_score": 0.7271,
+      "support": 836
+    },
+    "Money transfer, virtual currency, or money service": {
+      "precision": 0.6773,
+      "recall": 0.7632,
+      "f1_score": 0.7177,
+      "support": 418
+    },
+    "Mortgage": {
+      "precision": 0.7265,
+      "recall": 0.9038,
+      "f1_score": 0.8055,
+      "support": 291
+    },
+    "Student loan": {
+      "precision": 0.4385,
+      "recall": 0.9159,
+      "f1_score": 0.593,
+      "support": 214
+    },
+    "Vehicle loan or lease": {
+      "precision": 0.4104,
+      "recall": 0.7631,
+      "f1_score": 0.5337,
+      "support": 249
+    }
+  },
+  "most_frequent_misclassifications": [
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Debt collection",
+      "count": 637
+    },
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Credit card",
+      "count": 247
+    },
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Student loan",
+      "count": 223
+    },
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Vehicle loan or lease",
+      "count": 194
+    },
+    {
+      "true_category": "Debt collection",
+      "predicted_category": "Credit reporting or other personal consumer reports",
+      "count": 174
+    },
+    {
+      "true_category": "Checking or savings account",
+      "predicted_category": "Money transfer, virtual currency, or money service",
+      "count": 122
+    },
+    {
+      "true_category": "Money transfer, virtual currency, or money service",
+      "predicted_category": "Checking or savings account",
+      "count": 81
+    },
+    {
+      "true_category": "Checking or savings account",
+      "predicted_category": "Credit card",
+      "count": 77
+    },
+    {
+      "true_category": "Credit card",
+      "predicted_category": "Checking or savings account",
+      "count": 73
+    },
+    {
+      "true_category": "Debt collection",
+      "predicted_category": "Credit card",
+      "count": 62
+    }
+  ],
+  "confusion_matrix": [
+    [
+      6825,
+      637,
+      247,
+      46,
+      5,
+      55,
+      223,
+      194
+    ],
+    [
+      174,
+      1308,
+      62,
+      16,
+      8,
+      19,
+      20,
+      42
+    ],
+    [
+      55,
+      36,
+      632,
+      73,
+      16,
+      7,
+      3,
+      15
+    ],
+    [
+      10,
+      7,
+      77,
+      606,
+      122,
+      9,
+      1,
+      4
+    ],
+    [
+      2,
+      3,
+      8,
+      81,
+      319,
+      1,
+      1,
+      3
+    ],
+    [
+      3,
+      5,
+      7,
+      1,
+      1,
+      263,
+      1,
+      10
+    ],
+    [
+      7,
+      3,
+      2,
+      1,
+      0,
+      0,
+      196,
+      5
+    ],
+    [
+      18,
+      15,
+      9,
+      7,
+      0,
+      8,
+      2,
+      190
+    ]
+  ],
+  "training_history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.1812,
+      "val_loss": 0.7811,
+      "val_accuracy": 0.7665,
+      "val_macro_f1": 0.6394,
+      "val_weighted_f1": 0.7818,
+      "duration_seconds": 10.81
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.6987,
+      "val_loss": 0.6523,
+      "val_accuracy": 0.7918,
+      "val_macro_f1": 0.6801,
+      "val_weighted_f1": 0.8051,
+      "duration_seconds": 10.73
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.561,
+      "val_loss": 0.6582,
+      "val_accuracy": 0.7926,
+      "val_macro_f1": 0.6732,
+      "val_weighted_f1": 0.805,
+      "duration_seconds": 10.81
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.4805,
+      "val_loss": 0.6264,
+      "val_accuracy": 0.7939,
+      "val_macro_f1": 0.6908,
+      "val_weighted_f1": 0.8054,
+      "duration_seconds": 10.74
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.4025,
+      "val_loss": 0.6274,
+      "val_accuracy": 0.8124,
+      "val_macro_f1": 0.7067,
+      "val_weighted_f1": 0.823,
+      "duration_seconds": 11.04
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.3519,
+      "val_loss": 0.6529,
+      "val_accuracy": 0.7961,
+      "val_macro_f1": 0.702,
+      "val_weighted_f1": 0.81,
+      "duration_seconds": 11.24
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.3038,
+      "val_loss": 0.6731,
+      "val_accuracy": 0.8133,
+      "val_macro_f1": 0.7032,
+      "val_weighted_f1": 0.8239,
+      "duration_seconds": 11.42
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.2627,
+      "val_loss": 0.6814,
+      "val_accuracy": 0.791,
+      "val_macro_f1": 0.6866,
+      "val_weighted_f1": 0.8061,
+      "duration_seconds": 11.66
+    }
+  ],
+  "hardware": {
+    "device": "cuda",
+    "device_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "training_duration_seconds": 88.61
+  }
+}

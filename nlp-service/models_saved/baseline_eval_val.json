@@ -1,0 +1,211 @@
+{
+  "evaluated_at_utc": "2026-10-20T18:21:25+00:00",
+  "model_architecture": "TF-IDF (1,2-gram, 50k) + Logistic Regression (balanced)",
+  "num_train_samples": 59389,
+  "num_val_samples": 12726,
+  "labels": [
+    "Credit reporting or other personal consumer reports",
+    "Debt collection",
+    "Credit card",
+    "Checking or savings account",
+    "Money transfer, virtual currency, or money service",
+    "Mortgage",
+    "Student loan",
+    "Vehicle loan or lease"
+  ],
+  "metrics": {
+    "accuracy": 0.838,
+    "macro_f1": 0.7453,
+    "weighted_f1": 0.8455
+  },
+  "majority_class_baseline": {
+    "majority_class": "Credit reporting or other personal consumer reports",
+    "accuracy": 0.6469,
+    "macro_f1": 0.0982,
+    "weighted_f1": 0.5082
+  },
+  "per_class": {
+    "Credit reporting or other personal consumer reports": {
+      "precision": 0.967,
+      "recall": 0.8514,
+      "f1_score": 0.9056,
+      "support": 8232
+    },
+    "Debt collection": {
+      "precision": 0.6737,
+      "recall": 0.8302,
+      "f1_score": 0.7438,
+      "support": 1649
+    },
+    "Credit card": {
+      "precision": 0.6452,
+      "recall": 0.7909,
+      "f1_score": 0.7107,
+      "support": 837
+    },
+    "Checking or savings account": {
+      "precision": 0.7477,
+      "recall": 0.7943,
+      "f1_score": 0.7703,
+      "support": 836
+    },
+    "Money transfer, virtual currency, or money service": {
+      "precision": 0.7065,
+      "recall": 0.7488,
+      "f1_score": 0.7271,
+      "support": 418
+    },
+    "Mortgage": {
+      "precision": 0.7722,
+      "recall": 0.8969,
+      "f1_score": 0.8299,
+      "support": 291
+    },
+    "Student loan": {
+      "precision": 0.5013,
+      "recall": 0.8972,
+      "f1_score": 0.6432,
+      "support": 214
+    },
+    "Vehicle loan or lease": {
+      "precision": 0.5299,
+      "recall": 0.7831,
+      "f1_score": 0.6321,
+      "support": 249
+    }
+  },
+  "most_frequent_misclassifications": [
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Debt collection",
+      "count": 585
+    },
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Credit card",
+      "count": 227
+    },
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Student loan",
+      "count": 167
+    },
+    {
+      "true_category": "Debt collection",
+      "predicted_category": "Credit reporting or other personal consumer reports",
+      "count": 158
+    },
+    {
+      "true_category": "Credit reporting or other personal consumer reports",
+      "predicted_category": "Vehicle loan or lease",
+      "count": 135
+    },
+    {
+      "true_category": "Checking or savings account",
+      "predicted_category": "Money transfer, virtual currency, or money service",
+      "count": 95
+    },
+    {
+      "true_category": "Money transfer, virtual currency, or money service",
+      "predicted_category": "Checking or savings account",
+      "count": 88
+    },
+    {
+      "true_category": "Credit card",
+      "predicted_category": "Checking or savings account",
+      "count": 64
+    },
+    {
+      "true_category": "Checking or savings account",
+      "predicted_category": "Credit card",
+      "count": 57
+    },
+    {
+      "true_category": "Debt collection",
+      "predicted_category": "Credit card",
+      "count": 55
+    }
+  ],
+  "confusion_matrix": [
+    [
+      7009,
+      585,
+      227,
+      44,
+      14,
+      51,
+      167,
+      135
+    ],
+    [
+      158,
+      1369,
+      55,
+      11,
+      5,
+      12,
+      16,
+      23
+    ],
+    [
+      40,
+      42,
+      662,
+      64,
+      16,
+      3,
+      2,
+      8
+    ],
+    [
+      9,
+      4,
+      57,
+      664,
+      95,
+      5,
+      0,
+      2
+    ],
+    [
+      1,
+      4,
+      10,
+      88,
+      313,
+      1,
+      1,
+      0
+    ],
+    [
+      2,
+      9,
+      6,
+      7,
+      0,
+      261,
+      3,
+      3
+    ],
+    [
+      11,
+      4,
+      2,
+      2,
+      0,
+      1,
+      192,
+      2
+    ],
+    [
+      18,
+      15,
+      7,
+      8,
+      0,
+      4,
+      2,
+      195
+    ]
+  ]
+}
