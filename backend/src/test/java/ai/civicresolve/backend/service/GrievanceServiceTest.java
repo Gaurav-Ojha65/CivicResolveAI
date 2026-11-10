@@ -38,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -503,6 +504,35 @@ class GrievanceServiceTest {
         assertThat(grievance.getAssignedCategory()).isEqualTo("Credit reporting or other personal consumer reports");
         assertThat(grievance.getPriority()).isEqualTo(TriagePriority.LOW);
         assertThat(grievance.getNarrative()).isEqualTo("My credit report contains an unauthorized inquiry from an unknown entity.");
+    }
+
+    @Test
+    @DisplayName("getSystemStatus returns live operational status and probe metrics")
+    void getSystemStatus_success() {
+        given(nlpClientService.probeHealth())
+                .willReturn(new NlpClientService.NlpHealthProbeResult(true, 15.0, "baseline_tfidf_logreg"));
+        given(demoDataSeederService.isDemoBatchSeeded()).willReturn(true);
+
+        ai.civicresolve.backend.dto.SystemStatusResponse status = grievanceService.getSystemStatus();
+
+        assertThat(status.backendStatus()).isEqualTo("UP");
+        assertThat(status.nlpServiceReachable()).isTrue();
+        assertThat(status.nlpProbeLatencyMs()).isEqualTo(15.0);
+        assertThat(status.activeModelName()).isEqualTo("baseline_tfidf_logreg");
+        assertThat(status.demoBatchSeeded()).isTrue();
+        assertThat(status.serverTimestamp()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("list with search parameter delegates to repository with trimmed search term")
+    void list_withSearch_delegatesToRepository() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        given(grievanceRepository.findAll(eq(GrievanceStatus.PENDING_REVIEW), eq(TriagePriority.HIGH), eq("Debt collection"), eq("dispute"), eq(pageable)))
+                .willReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+
+        grievanceService.list(GrievanceStatus.PENDING_REVIEW, TriagePriority.HIGH, "Debt collection", "  dispute  ", 0, 10);
+
+        verify(grievanceRepository).findAll(eq(GrievanceStatus.PENDING_REVIEW), eq(TriagePriority.HIGH), eq("Debt collection"), eq("dispute"), eq(pageable));
     }
 
     // ─── Helpers: reflectively set id and version on Grievance ────────────

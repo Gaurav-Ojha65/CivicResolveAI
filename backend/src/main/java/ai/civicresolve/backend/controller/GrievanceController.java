@@ -18,8 +18,10 @@ import ai.civicresolve.backend.dto.ModelAuditResponse;
 import ai.civicresolve.backend.dto.PreviewClassifyRequest;
 import ai.civicresolve.backend.dto.ReviewRequest;
 import ai.civicresolve.backend.dto.SemanticPrecedentResponse;
+import ai.civicresolve.backend.dto.SystemStatusResponse;
 import ai.civicresolve.backend.entity.GrievanceStatus;
 import ai.civicresolve.backend.entity.TriagePriority;
+import ai.civicresolve.backend.service.DemoDataSeederService;
 import ai.civicresolve.backend.service.GrievanceService;
 import ai.civicresolve.backend.service.GrievanceTrackingService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -116,8 +118,12 @@ public class GrievanceController {
             @RequestParam(required = false) GrievanceStatus status,
             @RequestParam(required = false) TriagePriority priority,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        if (search != null && !search.isBlank()) {
+            return ResponseEntity.ok(grievanceService.list(status, priority, category, search, page, size));
+        }
         return ResponseEntity.ok(grievanceService.list(status, priority, category, page, size));
     }
 
@@ -152,17 +158,39 @@ public class GrievanceController {
     }
 
     /**
+     * Reviewer-protected operational system health and telemetry status.
+     * Evaluates backend uptime, Flyway migration version, NLP reachability probe, and demo batch presence.
+     */
+    @GetMapping("/analytics/system-status")
+    @PreAuthorize("hasRole('REVIEWER')")
+    public ResponseEntity<SystemStatusResponse> getSystemStatus() {
+        return ResponseEntity.ok(grievanceService.getSystemStatus());
+    }
+
+    /**
      * Seeds realistic CFPB complaints across all 8 product categories for demo and testing.
-     * Requires REVIEWER role.
+     * Requires REVIEWER role and confirmation query parameter confirm=true.
      */
     @PostMapping("/analytics/seed-demo")
     @PreAuthorize("hasRole('REVIEWER')")
-    public ResponseEntity<Map<String, Object>> seedDemoData() {
-        int count = grievanceService.seedRealisticDemoTelemetry();
+    public ResponseEntity<Map<String, Object>> seedDemoData(
+            @RequestParam(name = "confirm", defaultValue = "false") boolean confirm) {
+        if (!confirm) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Seeding confirmation required. Pass confirm=true to proceed.",
+                    "recordsCreated", 0,
+                    "alreadySeeded", false
+            ));
+        }
+        DemoDataSeederService.SeedResult result = grievanceService.seedRealisticDemoTelemetry(confirm);
         return ResponseEntity.ok(Map.of(
                 "status", "success",
-                "message", "Realistic CFPB operational telemetry seeded successfully.",
-                "recordsCreated", count
+                "message", result.alreadySeeded()
+                        ? "Synthetic demo telemetry already initialized (idempotent no-op)."
+                        : "Realistic CFPB operational telemetry seeded successfully.",
+                "recordsCreated", result.recordsCreated(),
+                "alreadySeeded", result.alreadySeeded()
         ));
     }
 

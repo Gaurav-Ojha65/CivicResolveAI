@@ -1,5 +1,5 @@
-import React, { useState, ReactNode } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, ReactNode } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ShieldCheck,
   LayoutDashboard,
@@ -17,6 +17,9 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../app/providers/AuthProvider';
+import { CommandPaletteModal } from '../../features/reviewer/components/CommandPaletteModal';
+import { getSystemStatus } from '../../lib/api/endpoints';
+import { SystemStatusResponse } from '../../types/grievance';
 
 interface ReviewerLayoutProps {
   children: ReactNode;
@@ -35,26 +38,43 @@ export const ReviewerLayout: React.FC<ReviewerLayoutProps> = ({
 }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [lookupQuery, setLookupQuery] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const data = await getSystemStatus();
+      setSystemStatus(data);
+    } catch {
+      // Bounded fallback: do not crash reviewer shell on telemetry failure
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
+  }, [fetchStatus]);
+
+  // Global Ctrl+K / Cmd+K listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const isQueueActive = location.pathname === '/reviewer' && location.hash === '#queue';
   const isOverviewActive = location.pathname === '/reviewer' && !location.hash;
   const isDetailActive = location.pathname.startsWith('/reviewer/grievances/');
   const isAuditActive = location.pathname === '/reviewer/audit';
   const isAnalyticsActive = location.pathname === '/reviewer/analytics';
-
-  const handleLookupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = lookupQuery.trim();
-    if (!query) return;
-
-    // If query looks like a UUID or ID snippet
-    navigate(`/reviewer/grievances/${encodeURIComponent(query)}`);
-    setLookupQuery('');
-  };
 
   return (
     <div className="min-h-screen flex bg-[#F8FAFC] text-slate-800 font-sans antialiased">
@@ -359,28 +379,54 @@ export const ReviewerLayout: React.FC<ReviewerLayoutProps> = ({
             </div>
           </div>
 
-          {/* Center: Search / Lookup control */}
+          {/* Center: Search / Global Command Palette Trigger */}
           <div className="flex-1 max-w-md hidden md:block">
-            <form onSubmit={handleLookupSubmit} className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-              />
-              <input
-                type="text"
-                placeholder="Search complaint by ID... (e.g. 12345678)"
-                value={lookupQuery}
-                onChange={(e) => setLookupQuery(e.target.value)}
-                className="w-full text-xs pl-9 pr-14 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-600 transition-all shadow-inner"
-              />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono font-medium text-slate-400 bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-xs pointer-events-none">
-                Enter
-              </span>
-            </form>
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="w-full text-xs px-3.5 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-slate-500 flex items-center justify-between transition-all shadow-inner group"
+            >
+              <div className="flex items-center gap-2.5 truncate">
+                <Search size={15} className="text-slate-400 group-hover:text-slate-600 transition-colors" />
+                <span className="truncate">Search complaint by ID, category, or command...</span>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono text-[10px] text-slate-500 shadow-2xs">
+                  Ctrl+K
+                </kbd>
+              </div>
+            </button>
           </div>
 
           {/* Right: Actions & User Info */}
           <div className="flex items-center gap-3">
+            {/* Live Header Telemetry Pill */}
+            {systemStatus && (
+              <div
+                className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-mono"
+                title={`Database Schema: ${systemStatus.databaseSchemaVersion || 'V6'} • Latency: ${systemStatus.nlpProbeLatencyMs != null ? `${systemStatus.nlpProbeLatencyMs.toFixed(1)}ms` : '—'} • Active Model: ${systemStatus.activeModelName || 'baseline'} • Server Time: ${systemStatus.serverTimestamp ? new Date(systemStatus.serverTimestamp).toLocaleTimeString() : '—'}`}
+              >
+                <span className="px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700 font-bold text-[10px]">
+                  {systemStatus.databaseSchemaVersion || 'V6'}
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      systemStatus.nlpServiceReachable
+                        ? 'bg-emerald-500 animate-pulse'
+                        : 'bg-rose-500'
+                    }`}
+                  />
+                  <span className={systemStatus.nlpServiceReachable ? 'text-slate-700 font-medium' : 'text-rose-600 font-bold'}>
+                    {systemStatus.nlpServiceReachable
+                      ? `NLP ${systemStatus.nlpProbeLatencyMs != null ? `${systemStatus.nlpProbeLatencyMs.toFixed(0)}ms` : 'UP'}`
+                      : 'NLP Offline'}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {onRefresh && (
               <button
                 type="button"
@@ -419,6 +465,14 @@ export const ReviewerLayout: React.FC<ReviewerLayoutProps> = ({
             </button>
           </div>
         </header>
+
+        {/* Global Command Palette Modal */}
+        <CommandPaletteModal
+          isOpen={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          systemStatus={systemStatus}
+          onStatusRefresh={fetchStatus}
+        />
 
         {/* Page Content */}
         <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">

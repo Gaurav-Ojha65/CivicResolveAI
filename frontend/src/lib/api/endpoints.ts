@@ -22,6 +22,7 @@ import {
   SemanticPrecedentResponse,
   CalibrationMetricsResponse,
   ActiveLearningManifestResponse,
+  SystemStatusResponse,
 } from '../../types/grievance';
 import { PageableParams } from '../../types/api';
 
@@ -29,6 +30,7 @@ export interface ListGrievancesParams extends PageableParams {
   status?: GrievanceStatus;
   priority?: TriagePriority;
   category?: string;
+  search?: string;
 }
 
 /**
@@ -211,10 +213,26 @@ export async function getExecutiveAnalytics(
  * POST /api/grievances/analytics/seed-demo
  */
 export async function seedDemoTelemetry(
+  confirm = true,
   signal?: AbortSignal
 ): Promise<SeedDemoResponse> {
   return apiClient<SeedDemoResponse>('/api/grievances/analytics/seed-demo', {
     method: 'POST',
+    params: { confirm },
+    requiresAuth: true,
+    signal,
+  });
+}
+
+/**
+ * Retrieve live operational system status and probe metrics (Protected, requires ROLE_REVIEWER).
+ * GET /api/grievances/analytics/system-status
+ */
+export async function getSystemStatus(
+  signal?: AbortSignal
+): Promise<SystemStatusResponse> {
+  return apiClient<SystemStatusResponse>('/api/grievances/analytics/system-status', {
+    method: 'GET',
     requiresAuth: true,
     signal,
   });

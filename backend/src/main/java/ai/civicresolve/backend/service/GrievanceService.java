@@ -15,6 +15,7 @@ import ai.civicresolve.backend.dto.PrecedentRankRequest;
 import ai.civicresolve.backend.dto.PrecedentRankResponse;
 import ai.civicresolve.backend.dto.ReviewRequest;
 import ai.civicresolve.backend.dto.SemanticPrecedentResponse;
+import ai.civicresolve.backend.dto.SystemStatusResponse;
 import ai.civicresolve.backend.entity.AuditLog;
 import ai.civicresolve.backend.entity.Grievance;
 import ai.civicresolve.backend.entity.GrievanceStatus;
@@ -27,8 +28,10 @@ import ai.civicresolve.backend.repository.AuditLogRepository;
 import ai.civicresolve.backend.repository.GrievanceRepository;
 import ai.civicresolve.backend.repository.PredictionRepository;
 import ai.civicresolve.backend.repository.ProductCategoryRepository;
+import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +39,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -78,6 +82,29 @@ public class GrievanceService {
     private final NlpClientService nlpClientService;
     private final GrievancePersistenceService grievancePersistenceService;
     private final DemoDataSeederService demoDataSeederService;
+    private final Clock clock;
+    private final Flyway flyway;
+
+    @Autowired
+    public GrievanceService(GrievanceRepository grievanceRepository,
+                            PredictionRepository predictionRepository,
+                            AuditLogRepository auditLogRepository,
+                            ProductCategoryRepository productCategoryRepository,
+                            NlpClientService nlpClientService,
+                            GrievancePersistenceService grievancePersistenceService,
+                            DemoDataSeederService demoDataSeederService,
+                            Clock clock,
+                            @Autowired(required = false) Flyway flyway) {
+        this.grievanceRepository = grievanceRepository;
+        this.predictionRepository = predictionRepository;
+        this.auditLogRepository = auditLogRepository;
+        this.productCategoryRepository = productCategoryRepository;
+        this.nlpClientService = nlpClientService;
+        this.grievancePersistenceService = grievancePersistenceService;
+        this.demoDataSeederService = demoDataSeederService;
+        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.flyway = flyway;
+    }
 
     public GrievanceService(GrievanceRepository grievanceRepository,
                             PredictionRepository predictionRepository,
@@ -86,13 +113,8 @@ public class GrievanceService {
                             NlpClientService nlpClientService,
                             GrievancePersistenceService grievancePersistenceService,
                             DemoDataSeederService demoDataSeederService) {
-        this.grievanceRepository = grievanceRepository;
-        this.predictionRepository = predictionRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.productCategoryRepository = productCategoryRepository;
-        this.nlpClientService = nlpClientService;
-        this.grievancePersistenceService = grievancePersistenceService;
-        this.demoDataSeederService = demoDataSeederService;
+        this(grievanceRepository, predictionRepository, auditLogRepository, productCategoryRepository,
+                nlpClientService, grievancePersistenceService, demoDataSeederService, Clock.systemUTC(), null);
     }
 
     // ─── Submission ──────────────────────────────────────────────────────────
@@ -130,12 +152,23 @@ public class GrievanceService {
     public Page<GrievanceResponse> list(GrievanceStatus status,
                                         TriagePriority priority,
                                         String category,
+                                        String search,
                                         int page,
                                         int size) {
         int safeSize = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, safeSize);
-        return grievanceRepository.findAll(status, priority, category, pageable)
+        String safeSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+        return grievanceRepository.findAll(status, priority, category, safeSearch, pageable)
                 .map(GrievanceResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<GrievanceResponse> list(GrievanceStatus status,
+                                        TriagePriority priority,
+                                        String category,
+                                        int page,
+                                        int size) {
+        return list(status, priority, category, null, page, size);
     }
 
     @Transactional(readOnly = true)
@@ -416,7 +449,7 @@ public class GrievanceService {
                 );
 
         // SLA Aging (pending cases: <24h on track, 24-72h at risk, >72h breached)
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant twentyFourHoursAgo = now.minus(Duration.ofHours(24));
         Instant seventyTwoHoursAgo = now.minus(Duration.ofHours(72));
         GrievanceRepository.SlaAgingProjection slaProj =
@@ -492,8 +525,40 @@ public class GrievanceService {
     /**
      * Seeds realistic CFPB complaints across all 8 product categories for demo and testing.
      */
+    public DemoDataSeederService.SeedResult seedRealisticDemoTelemetry(boolean confirm) {
+        return demoDataSeederService.seedRealisticDemoTelemetry(confirm);
+    }
+
     public int seedRealisticDemoTelemetry() {
         return demoDataSeederService.seedRealisticDemoTelemetry();
+    }
+
+    /**
+     * Fetches live operational system status and telemetry.
+     */
+    public SystemStatusResponse getSystemStatus() {
+        String schemaVersion = "UNKNOWN";
+        try {
+            if (flyway != null && flyway.info() != null && flyway.info().current() != null) {
+                schemaVersion = "V" + flyway.info().current().getVersion().toString();
+            }
+        } catch (Exception e) {
+            log.warn("Could not determine schema version from Flyway: {}", e.getMessage());
+        }
+
+        NlpClientService.NlpHealthProbeResult probe = nlpClientService.probeHealth();
+        boolean demoBatchSeeded = demoDataSeederService.isDemoBatchSeeded();
+        Instant now = clock.instant();
+
+        return new SystemStatusResponse(
+                "UP",
+                schemaVersion,
+                probe.reachable(),
+                probe.latencyMs(),
+                probe.activeModelName(),
+                now,
+                demoBatchSeeded
+        );
     }
 
     /**

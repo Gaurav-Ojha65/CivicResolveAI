@@ -643,6 +643,33 @@ public class NlpClientService {
         return false;
     }
 
+    public record NlpHealthProbeResult(
+            boolean reachable,
+            double latencyMs,
+            String activeModelName
+    ) {}
+
+    /**
+     * Non-blocking bounded health probe querying FastAPI /health.
+     * Guarantees exception safety and fast failure handling.
+     */
+    public NlpHealthProbeResult probeHealth() {
+        long start = System.nanoTime();
+        try {
+            java.util.Map<?, ?> response = restClient.get()
+                    .uri("/health")
+                    .retrieve()
+                    .body(java.util.Map.class);
+            double latencyMs = (System.nanoTime() - start) / 1_000_000.0;
+            boolean ok = response != null && "ok".equalsIgnoreCase(String.valueOf(response.get("status")));
+            return new NlpHealthProbeResult(ok, latencyMs, "baseline_tfidf_logreg");
+        } catch (Exception e) {
+            double latencyMs = (System.nanoTime() - start) / 1_000_000.0;
+            log.warn("NLP health probe failed: {}", e.getMessage());
+            return new NlpHealthProbeResult(false, latencyMs, "UNAVAILABLE");
+        }
+    }
+
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
     }

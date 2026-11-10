@@ -12,30 +12,46 @@ import ai.civicresolve.backend.repository.GrievanceTrackingCredentialRepository;
 import ai.civicresolve.backend.repository.PredictionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Service to seed realistic operational telemetry and demo complaints
  * across all 8 CFPB product categories, priorities, and workflow statuses.
+ *
+ * <p>Idempotent and clock-driven: uses deterministic UUIDs and checks for presence
+ * before persisting, preventing duplicate insertions on repeat invocations.
  */
 @Service
 public class DemoDataSeederService {
 
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeederService.class);
 
+    public static final UUID DEMO_BATCH_SENTINEL_ID =
+            UUID.nameUUIDFromBytes("civicresolve-synthetic-demo-0".getBytes(StandardCharsets.UTF_8));
+
     private final GrievanceRepository grievanceRepository;
     private final PredictionRepository predictionRepository;
     private final AuditLogRepository auditLogRepository;
     private final GrievanceTrackingCredentialRepository trackingCredentialRepository;
     private final TrackingCryptoService trackingCryptoService;
+    private final Clock clock;
+
+    @Value("${civicresolve.demo.seeding-enabled:true}")
+    private boolean seedingEnabled = true;
 
     private static final String MODEL_USED = "baseline_tfidf_logreg";
     private static final String MODEL_VERSION = "7a9964e0ef15514dfe3a561977b7da7826209042799a6ca2a11b7f04d9c80bc0";
@@ -44,12 +60,27 @@ public class DemoDataSeederService {
                                  PredictionRepository predictionRepository,
                                  AuditLogRepository auditLogRepository,
                                  GrievanceTrackingCredentialRepository trackingCredentialRepository,
-                                 TrackingCryptoService trackingCryptoService) {
+                                 TrackingCryptoService trackingCryptoService,
+                                 Clock clock) {
         this.grievanceRepository = grievanceRepository;
         this.predictionRepository = predictionRepository;
         this.auditLogRepository = auditLogRepository;
         this.trackingCredentialRepository = trackingCredentialRepository;
         this.trackingCryptoService = trackingCryptoService;
+        this.clock = clock;
+    }
+
+    public record SeedResult(
+            int recordsCreated,
+            boolean alreadySeeded,
+            String message
+    ) {}
+
+    /**
+     * Checks whether the synthetic demo batch has already been persisted.
+     */
+    public boolean isDemoBatchSeeded() {
+        return grievanceRepository.existsById(DEMO_BATCH_SENTINEL_ID);
     }
 
     private record SeedTemplate(
@@ -67,24 +98,55 @@ public class DemoDataSeederService {
             int hoursAgo
     ) {}
 
+    /**
+     * Backward-compatible default overload.
+     */
     @Transactional
     public int seedRealisticDemoTelemetry() {
-        log.info("Seeding realistic CFPB demo grievance telemetry...");
+        return seedRealisticDemoTelemetry(true).recordsCreated();
+    }
+
+    /**
+     * Idempotent clock-driven demo seeder.
+     *
+     * @param confirm user confirmation flag; must be true
+     * @return SeedResult indicating records created and idempotent state
+     */
+    @Transactional
+    public SeedResult seedRealisticDemoTelemetry(boolean confirm) {
+        if (!seedingEnabled) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Synthetic demo data seeding is disabled in this environment.");
+        }
+        if (!confirm) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Seeding confirmation required. Pass confirm=true to proceed.");
+        }
+        if (isDemoBatchSeeded()) {
+            log.info("Synthetic demo telemetry already seeded (sentinel {} exists). Idempotent no-op.", DEMO_BATCH_SENTINEL_ID);
+            return new SeedResult(0, true, "Synthetic demo telemetry already initialized (idempotent no-op).");
+        }
+
+        log.info("Seeding realistic CFPB demo grievance telemetry with deterministic UUIDs...");
         List<SeedTemplate> templates = getSeedTemplates();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         int createdCount = 0;
 
-        for (SeedTemplate t : templates) {
+        for (int i = 0; i < templates.size(); i++) {
+            SeedTemplate t = templates.get(i);
+            UUID deterministicId = UUID.nameUUIDFromBytes(
+                    ("civicresolve-synthetic-demo-" + i).getBytes(StandardCharsets.UTF_8));
             Instant submittedAt = now.minus(Duration.ofDays(t.daysAgo())).minus(Duration.ofHours(t.hoursAgo()));
-            
-            // 1. Create and save Grievance
+
+            // 1. Create and save Grievance with deterministic UUID & [SYNTHETIC DEMO] tag
             Grievance grievance = new Grievance(
-                    t.narrative(),
+                    "[SYNTHETIC DEMO] " + t.narrative(),
                     t.category(),
                     t.priority(),
                     t.status(),
                     t.flagForReview()
             );
+            grievance.setId(deterministicId);
             grievance.setSubmittedAt(submittedAt);
             grievance.setUpdatedAt(t.status() == GrievanceStatus.PENDING_REVIEW ? submittedAt : submittedAt.plus(Duration.ofHours(2)));
             grievance = grievanceRepository.save(grievance);
@@ -162,7 +224,7 @@ public class DemoDataSeederService {
                         .newCategory(t.category())
                         .previousPriority(t.priority().name())
                         .newPriority(t.priority().name())
-                        .reviewNote("AI preliminary assessment verified against submitted documentation.")
+                        .reviewNote("[SYNTHETIC DEMO] AI preliminary assessment verified against submitted documentation.")
                         .createdAt(submittedAt.plus(Duration.ofHours(2)))
                         .build();
                 auditLogRepository.save(reviewAudit);
@@ -174,7 +236,7 @@ public class DemoDataSeederService {
                         .newCategory(t.category())
                         .previousPriority(t.priority() == TriagePriority.HIGH ? TriagePriority.MEDIUM.name() : t.priority().name())
                         .newPriority(t.priority().name())
-                        .reviewNote("Narrative context indicates specialized handling under revised category.")
+                        .reviewNote("[SYNTHETIC DEMO] Narrative context indicates specialized handling under revised category.")
                         .createdAt(submittedAt.plus(Duration.ofHours(2)))
                         .build();
                 auditLogRepository.save(reviewAudit);
@@ -194,13 +256,13 @@ public class DemoDataSeederService {
         }
 
         log.info("Successfully seeded {} realistic CFPB complaints across all 8 categories.", createdCount);
-        return createdCount;
+        return new SeedResult(createdCount, false, "Realistic CFPB operational telemetry seeded successfully.");
     }
 
     private List<SeedTemplate> getSeedTemplates() {
         List<SeedTemplate> list = new ArrayList<>();
 
-        // Credit reporting (4 cases)
+        // Credit reporting (4 cases: 1 pending on-track, 3 completed)
         list.add(new SeedTemplate(
                 "Credit reporting or other personal consumer reports",
                 "I discovered an unauthorized hard inquiry on my credit report from a lender I have never had any relationship with. I sent two dispute letters demanding removal under the FCRA, but the bureau failed to investigate within 30 days.",
@@ -211,7 +273,7 @@ public class DemoDataSeederService {
                 "Credit reporting or other personal consumer reports",
                 "My credit file contains an erroneous public record judgment belonging to someone with a similar name in another state. This has dropped my credit score by 85 points and prevented mortgage refinancing.",
                 TriagePriority.CRITICAL, GrievanceStatus.PENDING_REVIEW, 0.78, 0.18, true,
-                "Credit reporting or other personal consumer reports", -0.82, "NEGATIVE", 2, 6
+                "Credit reporting or other personal consumer reports", -0.82, "NEGATIVE", 0, 2 // On-Track (<24h, 2h)
         ));
         list.add(new SeedTemplate(
                 "Credit reporting or other personal consumer reports",
@@ -226,7 +288,7 @@ public class DemoDataSeederService {
                 "Debt collection", -0.91, "NEGATIVE", 5, 8
         ));
 
-        // Debt collection (4 cases)
+        // Debt collection (4 cases: 1 pending on-track, 3 completed)
         list.add(new SeedTemplate(
                 "Debt collection",
                 "A debt collection agency has been repeatedly calling my workplace after I explicitly notified them in writing that my employer does not allow personal phone calls. They threatened wage garnishment without a court judgment.",
@@ -237,7 +299,7 @@ public class DemoDataSeederService {
                 "Debt collection",
                 "Collector is seeking repayment for an ancient medical bill from 2014 which is well past the state statute of limitations. They refuse to send verification of debt.",
                 TriagePriority.HIGH, GrievanceStatus.PENDING_REVIEW, 0.74, 0.22, true,
-                "Debt collection", -0.55, "NEGATIVE", 1, 14
+                "Debt collection", -0.55, "NEGATIVE", 0, 4 // On-Track (<24h, 4h)
         ));
         list.add(new SeedTemplate(
                 "Debt collection",
@@ -252,12 +314,12 @@ public class DemoDataSeederService {
                 "Checking or savings account", -0.84, "NEGATIVE", 4, 11
         ));
 
-        // Credit card (4 cases)
+        // Credit card (4 cases: 1 pending on-track, 3 completed)
         list.add(new SeedTemplate(
                 "Credit card",
                 "My credit card statement includes $1,420 in unauthorized international transaction charges while I was hospitalized. The bank denied my dispute claim without providing documentation.",
                 TriagePriority.CRITICAL, GrievanceStatus.PENDING_REVIEW, 0.91, 0.65, true,
-                "Credit card", -0.89, "NEGATIVE", 0, 5
+                "Credit card", -0.89, "NEGATIVE", 0, 6 // On-Track (<24h, 6h)
         ));
         list.add(new SeedTemplate(
                 "Credit card",
@@ -278,12 +340,12 @@ public class DemoDataSeederService {
                 "Credit card", -0.22, "NEUTRAL", 10, 16
         ));
 
-        // Checking or savings account (4 cases)
+        // Checking or savings account (4 cases: 1 pending on-track, 3 completed)
         list.add(new SeedTemplate(
                 "Checking or savings account",
                 "The bank placed a freeze on my primary checking account following a direct deposit transfer. Customer service has held my paycheck for 10 days with no explanation or resolution timeline.",
                 TriagePriority.CRITICAL, GrievanceStatus.PENDING_REVIEW, 0.84, 0.31, true,
-                "Checking or savings account", -0.87, "NEGATIVE", 1, 2
+                "Checking or savings account", -0.87, "NEGATIVE", 0, 9 // On-Track (<24h, 9h)
         ));
         list.add(new SeedTemplate(
                 "Checking or savings account",
@@ -304,12 +366,12 @@ public class DemoDataSeederService {
                 "Money transfer, virtual currency, or money service", -0.68, "NEGATIVE", 3, 15
         ));
 
-        // Money transfer / virtual currency (4 cases)
+        // Money transfer / virtual currency (4 cases: 1 pending on-track, 3 completed)
         list.add(new SeedTemplate(
                 "Money transfer, virtual currency, or money service",
                 "International remittance sent to support family overseas was debited from my debit card but never deposited into recipient bank account. Provider support is unresponsive.",
                 TriagePriority.HIGH, GrievanceStatus.PENDING_REVIEW, 0.86, 0.39, true,
-                "Money transfer, virtual currency, or money service", -0.71, "NEGATIVE", 2, 19
+                "Money transfer, virtual currency, or money service", -0.71, "NEGATIVE", 0, 12 // On-Track (<24h, 12h)
         ));
         list.add(new SeedTemplate(
                 "Money transfer, virtual currency, or money service",
@@ -330,7 +392,7 @@ public class DemoDataSeederService {
                 "Money transfer, virtual currency, or money service", -0.31, "NEUTRAL", 9, 21
         ));
 
-        // Mortgage (4 cases)
+        // Mortgage (4 cases: 1 pending on-track, 3 completed)
         list.add(new SeedTemplate(
                 "Mortgage",
                 "My mortgage servicer failed to pay property taxes from my escrow account despite sufficient balance, resulting in county tax lien penalties assessed against my home.",
@@ -341,7 +403,7 @@ public class DemoDataSeederService {
                 "Mortgage",
                 "The servicer sent a foreclosure notice while our complete loss mitigation assistance package was under active review, violating CFPB dual-tracking rules.",
                 TriagePriority.CRITICAL, GrievanceStatus.PENDING_REVIEW, 0.94, 0.67, true,
-                "Mortgage", -0.92, "NEGATIVE", 0, 18
+                "Mortgage", -0.92, "NEGATIVE", 0, 16 // On-Track (<24h, 16h)
         ));
         list.add(new SeedTemplate(
                 "Mortgage",
@@ -356,7 +418,7 @@ public class DemoDataSeederService {
                 "Mortgage", -0.41, "NEGATIVE", 13, 14
         ));
 
-        // Student loan (4 cases)
+        // Student loan (4 cases: 1 pending at-risk, 3 completed)
         list.add(new SeedTemplate(
                 "Student loan",
                 "My loan servicer miscalculated qualifying payment counts under Public Service Loan Forgiveness (PSLF). Over 36 certified on-time monthly payments were categorized as ineligible.",
@@ -373,7 +435,7 @@ public class DemoDataSeederService {
                 "Student loan",
                 "Submitted Income-Driven Repayment (IDR) annual recertification documentation 60 days before deadline; servicer placed loan in administrative forbearance capitalizing accrued interest.",
                 TriagePriority.MEDIUM, GrievanceStatus.PENDING_REVIEW, 0.83, 0.36, true,
-                "Student loan", -0.56, "NEGATIVE", 2, 22
+                "Student loan", -0.56, "NEGATIVE", 1, 12 // At-Risk (24–72h, 36h)
         ));
         list.add(new SeedTemplate(
                 "Student loan",
@@ -382,12 +444,12 @@ public class DemoDataSeederService {
                 "Student loan", -0.25, "NEUTRAL", 12, 19
         ));
 
-        // Vehicle loan or lease (4 cases)
+        // Vehicle loan or lease (4 cases: 1 pending breached, 3 completed)
         list.add(new SeedTemplate(
                 "Vehicle loan or lease",
                 "Auto finance company dispatched a repossession tow truck despite all monthly payments being current and verified via bank statements. Repossession fees charged improperly.",
                 TriagePriority.CRITICAL, GrievanceStatus.PENDING_REVIEW, 0.87, 0.48, true,
-                "Vehicle loan or lease", -0.93, "NEGATIVE", 0, 9
+                "Vehicle loan or lease", -0.93, "NEGATIVE", 3, 12 // Breached (>72h, 84h)
         ));
         list.add(new SeedTemplate(
                 "Vehicle loan or lease",

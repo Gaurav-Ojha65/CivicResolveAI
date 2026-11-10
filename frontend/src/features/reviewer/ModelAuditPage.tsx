@@ -675,9 +675,12 @@ export const ModelAuditPage: React.FC = () => {
                   </svg>
 
                   {/* Rate display */}
-                  <div className="absolute inset-x-0 bottom-0 text-center">
-                    <span className="text-xl font-extrabold text-slate-900 font-mono">
-                      {(auditData.reviewerAgreementRate * 100).toFixed(1)}% Match
+                  <div className="absolute inset-x-0 bottom-0 text-center flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight tabular-nums leading-none">
+                      {(auditData.reviewerAgreementRate * 100).toFixed(1)}%
+                    </span>
+                    <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mt-1">
+                      Agreement
                     </span>
                   </div>
                 </div>
@@ -901,7 +904,7 @@ export const ModelAuditPage: React.FC = () => {
                       Probability Calibration Inspector &amp; Reliability Diagram
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Post-hoc Temperature Scaling analysis on 50/50 stratified validation split ($N=6,363$ fit / $N=6,363$ eval) &bull; Held-out test set sealed.
+                      Post-hoc Temperature Scaling analysis on 50/50 stratified validation split (n = 6,363 fit / n = 6,363 eval) &bull; Held-out test set sealed.
                     </p>
                   </div>
                 </div>
@@ -1159,7 +1162,7 @@ export const ModelAuditPage: React.FC = () => {
                   <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-200/80 text-[11px] text-teal-900 space-y-1">
                     <span className="font-bold block">Academic Integrity Protocol:</span>
                     <span>
-                      Calibration parameters were fit strictly on 50% of the validation split ($N=6,363$) and evaluated on the other 50% ($N=6,363$). The held-out test split ($N=12,727$) remains completely sealed.
+                      Calibration parameters were fit strictly on 50% of the validation split (n = 6,363) and evaluated on the other 50% (n = 6,363). The held-out test split (n = 12,727) remains completely sealed.
                     </span>
                   </div>
                 </div>
@@ -1183,7 +1186,10 @@ export const ModelAuditPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-[10px] font-mono">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    Source: Frozen Evaluation Artifact baseline_eval_test.json &amp; bilstm_eval_test.json &bull; Sealed Test Split n = 12,727
+                  </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
                     Active: Baseline TF-IDF (0.7488 Test Macro-F1)
                   </span>
@@ -1312,7 +1318,7 @@ export const ModelAuditPage: React.FC = () => {
                         <th className="py-2 px-3 font-bold text-right">Share (%)</th>
                         <th className="py-2 px-3 font-bold text-center">Baseline Accuracy</th>
                         <th className="py-2 px-3 font-bold text-center">Bi-LSTM Accuracy</th>
-                        <th className="py-2 px-3 font-bold text-center">&Delta; Advantage</th>
+                        <th className="py-2 px-3 font-bold text-center">Δ Advantage</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono text-xs">
@@ -1433,7 +1439,7 @@ export const ModelAuditPage: React.FC = () => {
                       <th className="py-2 px-3 font-bold">Category</th>
                       <th className="py-2 px-3 font-bold text-center">Baseline F1</th>
                       <th className="py-2 px-3 font-bold text-center">Bi-LSTM F1</th>
-                      <th className="py-2 px-3 font-bold text-center">&Delta; F1</th>
+                      <th className="py-2 px-3 font-bold text-center">Δ F1</th>
                       <th className="py-2 px-3 font-bold text-right">Support (n)</th>
                     </tr>
                   </thead>

@@ -1216,9 +1216,10 @@ class GrievanceControllerTest {
     @Test
     @DisplayName("POST /api/grievances/analytics/seed-demo as REVIEWER → 200 with seeded count")
     void seedDemoDataAsReviewer() throws Exception {
-        given(grievanceService.seedRealisticDemoTelemetry()).willReturn(32);
+        given(grievanceService.seedRealisticDemoTelemetry(true))
+                .willReturn(new ai.civicresolve.backend.service.DemoDataSeederService.SeedResult(32, false, "Success"));
 
-        mockMvc.perform(post("/api/grievances/analytics/seed-demo")
+        mockMvc.perform(post("/api/grievances/analytics/seed-demo?confirm=true")
                         .with(user("reviewer").roles("REVIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("success"))
@@ -1410,5 +1411,72 @@ class GrievanceControllerTest {
                 .andExpect(header().exists("X-Export-SHA256"))
                 .andExpect(header().string("Content-Type", "text/csv; charset=UTF-8"))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("masked_narrative")));
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances/analytics/system-status as REVIEWER → 200 OK with telemetry payload")
+    void getSystemStatus_asReviewer_returns200() throws Exception {
+        ai.civicresolve.backend.dto.SystemStatusResponse response =
+                new ai.civicresolve.backend.dto.SystemStatusResponse(
+                        "UP",
+                        "V6",
+                        true,
+                        12.5,
+                        "baseline_tfidf_logreg",
+                        Instant.parse("2026-11-10T12:00:00Z"),
+                        true
+                );
+        given(grievanceService.getSystemStatus()).willReturn(response);
+
+        mockMvc.perform(get("/api/grievances/analytics/system-status")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.backendStatus").value("UP"))
+                .andExpect(jsonPath("$.databaseSchemaVersion").value("V6"))
+                .andExpect(jsonPath("$.nlpServiceReachable").value(true))
+                .andExpect(jsonPath("$.activeModelName").value("baseline_tfidf_logreg"))
+                .andExpect(jsonPath("$.demoBatchSeeded").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances/analytics/system-status unauthenticated → 401 Unauthorized")
+    void getSystemStatus_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(get("/api/grievances/analytics/system-status"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances with search param delegates to search service overload")
+    void listGrievances_withSearch_delegatesToService() throws Exception {
+        given(grievanceService.list(any(), any(), any(), eq("credit"), eq(0), eq(20)))
+                .willReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/grievances?search=credit")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /api/grievances/analytics/seed-demo without confirmation → 400 Bad Request")
+    void seedDemoData_withoutConfirm_returns400() throws Exception {
+        mockMvc.perform(post("/api/grievances/analytics/seed-demo")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("error"))
+                .andExpect(jsonPath("$.message").value(containsString("Seeding confirmation required")));
+    }
+
+    @Test
+    @DisplayName("POST /api/grievances/analytics/seed-demo with confirm=true → 200 OK")
+    void seedDemoData_withConfirm_returns200() throws Exception {
+        given(grievanceService.seedRealisticDemoTelemetry(true))
+                .willReturn(new ai.civicresolve.backend.service.DemoDataSeederService.SeedResult(32, false, "Success"));
+
+        mockMvc.perform(post("/api/grievances/analytics/seed-demo?confirm=true")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("success"))
+                .andExpect(jsonPath("$.recordsCreated").value(32))
+                .andExpect(jsonPath("$.alreadySeeded").value(false));
     }
 }

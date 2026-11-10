@@ -6,6 +6,7 @@ import { ReviewerDashboardPage } from '../../../src/features/reviewer/ReviewerDa
 import {
   GrievanceStatsResponse,
   GrievanceResponse,
+  GrievanceDetailResponse,
   SpringPage,
 } from '../../../src/types/grievance';
 import * as endpoints from '../../../src/lib/api/endpoints';
@@ -15,6 +16,9 @@ import { ApiError } from '../../../src/lib/errors/api-error';
 vi.mock('../../../src/lib/api/endpoints', () => ({
   getGrievanceStats: vi.fn(),
   listGrievances: vi.fn(),
+  getGrievanceById: vi.fn(),
+  getSystemStatus: vi.fn(),
+  seedDemoTelemetry: vi.fn(),
 }));
 
 const MOCK_STATS: GrievanceStatsResponse = {
@@ -46,6 +50,52 @@ const MOCK_GRIEVANCE: GrievanceResponse = {
   version: 1,
 };
 
+const MOCK_GRIEVANCE_DETAIL: GrievanceDetailResponse = {
+  id: '12345678-abcd-1234-abcd-1234567890ab',
+  narrative: 'I was improperly charged an unexpected escrow shortage fee by the loan servicer.',
+  assignedCategory: 'Mortgage',
+  priority: 'HIGH',
+  status: 'PENDING_REVIEW',
+  reviewRequired: true,
+  submittedAt: '2026-11-01T10:00:00Z',
+  updatedAt: '2026-11-01T10:00:00Z',
+  version: 1,
+  originalPrediction: {
+    predictedCategory: 'Mortgage',
+    modelUsed: 'LogisticRegression',
+    modelVersion: '1.0.0',
+    confidence: 0.88,
+    margin: 0.28,
+    probabilities: { Mortgage: 0.88, 'Debt collection': 0.12 },
+    flagForReview: false,
+    reviewReasons: [],
+    triagePriority: 'HIGH',
+    priorityReasons: ['High escrow impact'],
+    sentimentScore: -0.65,
+    sentimentLabel: 'NEGATIVE',
+    predictedAt: '2026-11-01T10:00:00Z',
+    explanation: {
+      predictedClass: 'Mortgage',
+      predictedDecisionScore: 1.45,
+      predictedIntercept: 0.12,
+      runnerUpClass: 'Debt collection',
+      runnerUpDecisionScore: 0.35,
+      runnerUpIntercept: -0.05,
+      decisionScoreMargin: 1.1,
+      topPositiveFeatures: [
+        { feature: 'escrow', contribution: 0.42 },
+        { feature: 'servicer', contribution: 0.38 },
+      ],
+      topNegativeFeatures: [
+        { feature: 'collection', contribution: -0.15 },
+      ],
+      topDifferenceFeatures: [],
+      modelProvenanceSha256: 'abc123sha',
+      explanationGeneratedAt: '2026-11-01T10:00:00Z',
+    },
+  },
+};
+
 const MOCK_PAGE: SpringPage<GrievanceResponse> = {
   content: [MOCK_GRIEVANCE],
   totalElements: 1,
@@ -69,6 +119,16 @@ describe('ReviewerDashboardPage', () => {
 
     vi.mocked(endpoints.getGrievanceStats).mockResolvedValue(MOCK_STATS);
     vi.mocked(endpoints.listGrievances).mockResolvedValue(MOCK_PAGE);
+    vi.mocked(endpoints.getGrievanceById).mockResolvedValue(MOCK_GRIEVANCE_DETAIL);
+    vi.mocked(endpoints.getSystemStatus).mockResolvedValue({
+      backendStatus: 'HEALTHY',
+      databaseSchemaVersion: 'V6',
+      nlpServiceReachable: true,
+      nlpProbeLatencyMs: 14.2,
+      activeModelName: 'baseline_tfidf_logreg',
+      serverTimestamp: '2026-11-11T00:00:00Z',
+      demoBatchSeeded: false,
+    });
   });
 
   function renderDashboard() {
@@ -205,5 +265,81 @@ describe('ReviewerDashboardPage', () => {
       }),
       expect.any(AbortSignal)
     );
+  });
+
+  it('triggers detail fetch on first Quick Peek click and renders preview content', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('12345678...')).toBeInTheDocument();
+    });
+
+    const quickPeekBtn = screen.getByRole('button', { name: /quick peek/i });
+    expect(quickPeekBtn).toBeInTheDocument();
+
+    await user.click(quickPeekBtn);
+
+    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('12345678-abcd-1234-abcd-1234567890ab');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quick-peek-content')).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByText(/escrow shortage fee/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText('+escrow')).toBeInTheDocument();
+    expect(screen.getByText('collection')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open investigation lab/i })).toHaveAttribute(
+      'href',
+      '/reviewer/grievances/12345678-abcd-1234-abcd-1234567890ab'
+    );
+  });
+
+  it('collapsing and re-expanding uses cached data with zero duplicate network calls', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('12345678...')).toBeInTheDocument();
+    });
+
+    const quickPeekBtn = screen.getByRole('button', { name: /quick peek/i });
+    await user.click(quickPeekBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quick-peek-content')).toBeInTheDocument();
+    });
+    expect(endpoints.getGrievanceById).toHaveBeenCalledTimes(1);
+
+    // Collapse
+    const closeBtn = screen.getByRole('button', { name: /close/i });
+    await user.click(closeBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('quick-peek-content')).not.toBeInTheDocument();
+    });
+
+    // Re-expand: Should use cached Map and NOT call getGrievanceById again
+    const reopenBtn = screen.getByRole('button', { name: /quick peek/i });
+    await user.click(reopenBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quick-peek-content')).toBeInTheDocument();
+    });
+    expect(endpoints.getGrievanceById).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders shimmer skeletons during loading states', async () => {
+    // Hold grievances, stats, and telemetry unresolved to test pure skeleton render
+    vi.mocked(endpoints.listGrievances).mockReturnValue(new Promise(() => {}));
+    vi.mocked(endpoints.getGrievanceStats).mockReturnValue(new Promise(() => {}));
+    vi.mocked(endpoints.getSystemStatus).mockReturnValue(new Promise(() => {}));
+
+    renderDashboard();
+
+    expect(screen.getByTestId('stats-skeleton')).toBeInTheDocument();
+    expect(screen.getByTestId('queue-skeleton')).toBeInTheDocument();
   });
 });

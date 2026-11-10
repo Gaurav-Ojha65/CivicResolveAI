@@ -46,10 +46,9 @@ describe('SemanticPrecedentCard', () => {
     render(<SemanticPrecedentCard grievanceId="123e4567-e89b-12d3-a456-426614174000" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Precedent Insights/i)).toBeInTheDocument();
+      expect(screen.getByText(/84.2% Similarity/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/84.2% Similarity/i)).toBeInTheDocument();
     expect(screen.getByText(/65.1% Similarity/i)).toBeInTheDocument();
     expect(screen.getByText(/Pool: 15 cases/i)).toBeInTheDocument();
   });

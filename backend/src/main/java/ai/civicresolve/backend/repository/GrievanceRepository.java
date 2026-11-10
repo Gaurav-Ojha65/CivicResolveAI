@@ -20,6 +20,24 @@ import java.util.UUID;
 public interface GrievanceRepository extends JpaRepository<Grievance, UUID> {
 
     /**
+     * Paginated list with optional filters and keyword/ID prefix search. NULL parameters are ignored.
+     */
+    @Query("""
+            SELECT g FROM Grievance g
+            WHERE (:status IS NULL OR g.status = :status)
+              AND (:priority IS NULL OR g.priority = :priority)
+              AND (:category IS NULL OR g.assignedCategory = :category)
+              AND (:search IS NULL OR LOWER(CAST(g.id AS string)) LIKE LOWER(CONCAT(:search, '%')) OR LOWER(g.assignedCategory) LIKE LOWER(CONCAT('%', :search, '%')))
+            ORDER BY g.submittedAt DESC
+            """)
+    Page<Grievance> findAll(
+            @Param("status") GrievanceStatus status,
+            @Param("priority") TriagePriority priority,
+            @Param("category") String category,
+            @Param("search") String search,
+            Pageable pageable);
+
+    /**
      * Paginated list with optional filters. NULL parameters are ignored.
      */
     @Query("""

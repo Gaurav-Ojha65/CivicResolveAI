@@ -143,7 +143,7 @@ describe('ModelAuditPage', () => {
     });
 
     expect(screen.getByText('120')).toBeInTheDocument(); // total adjudicated
-    expect(screen.getByText('85.0%')).toBeInTheDocument(); // agreement rate
+    expect(screen.getAllByText('85.0%').length).toBeGreaterThanOrEqual(1); // agreement rate
     expect(screen.getByText('18')).toBeInTheDocument(); // overridden
     expect(screen.getByText('Safety Flag Triggers')).toBeInTheDocument();
   });
@@ -232,6 +232,45 @@ describe('ModelAuditPage', () => {
     expect(screen.getAllByText('30').length).toBeGreaterThan(0); // approval count
     expect(screen.getByText(/Export Curated JSONL/i)).toBeInTheDocument();
     expect(screen.getByText(/Export Curated CSV/i)).toBeInTheDocument();
+  });
+
+  it('renders cleaned typography, provenance badge, and calibration gauge layout without LaTeX artifacts', async () => {
+    vi.mocked(endpoints.getModelAudit).mockResolvedValueOnce(sampleAuditData);
+
+    const { container } = render(
+      <MemoryRouter>
+        <ModelAuditPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/AI Audit & Model Benchmark Center/i)
+      ).toBeInTheDocument();
+    });
+
+    // 1. Assert absence of raw LaTeX $N= strings
+    expect(container.textContent).not.toContain('$N=');
+    expect(container.textContent).not.toContain('$N =');
+    expect(container.textContent).not.toContain('\\Delta');
+
+    // 2. Assert clean human-readable split notes
+    expect(screen.getByText(/n = 6,363 fit \/ n = 6,363 eval/i)).toBeInTheDocument();
+    expect(screen.getByText(/The held-out test split \(n = 12,727\) remains completely sealed/i)).toBeInTheDocument();
+
+    // 3. Assert provenance badge
+    expect(
+      screen.getByText(/Source: Frozen Evaluation Artifact baseline_eval_test\.json & bilstm_eval_test\.json • Sealed Test Split n = 12,727/i)
+    ).toBeInTheDocument();
+
+    // 4. Assert Delta columns
+    expect(screen.getByText('Δ Advantage')).toBeInTheDocument();
+    expect(screen.getByText('Δ F1')).toBeInTheDocument();
+
+    // 5. Assert Gauge rendering (85.0% on top line, Agreement on sub-line, no '% Match' collision)
+    expect(screen.getAllByText('85.0%')).toHaveLength(2); // Card 2 + Gauge
+    expect(screen.getByText('Agreement')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('85.0% Match');
   });
 
   it('renders error state when API call fails', async () => {

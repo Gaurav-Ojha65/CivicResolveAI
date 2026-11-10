@@ -130,6 +130,10 @@ public class Grievance {
         this.updatedAt = updatedAt;
     }
 
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
     public void setSubmittedAt(Instant submittedAt) {
         this.submittedAt = submittedAt;
     }

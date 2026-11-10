@@ -431,3 +431,13 @@ export interface ActiveLearningManifestResponse {
   exportedBy: string;
   sampleRecords: ActiveLearningRecord[];
 }
+
+export interface SystemStatusResponse {
+  backendStatus: string;
+  databaseSchemaVersion: string;
+  nlpServiceReachable: boolean;
+  nlpProbeLatencyMs: number;
+  activeModelName: string;
+  serverTimestamp: string;
+  demoBatchSeeded: boolean;
+}
