@@ -18,6 +18,7 @@ import {
 import { ReviewerLayout } from '../../components/layout/ReviewerLayout';
 import { getExecutiveAnalytics, seedDemoTelemetry } from '../../lib/api/endpoints';
 import { ExecutiveAnalyticsResponse } from '../../types/grievance';
+import { MonteCarloStressLab } from './components/MonteCarloStressLab';
 
 export const ExecutiveAnalyticsPage: React.FC = () => {
   const [data, setData] = useState<ExecutiveAnalyticsResponse | null>(null);
@@ -684,6 +685,9 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* ─── ROW 4: MONTE CARLO OPERATIONAL QUEUE & AI THRESHOLD STRESS LAB ─ */}
+        <MonteCarloStressLab analyticsData={data} />
       </div>
     </ReviewerLayout>
   );
