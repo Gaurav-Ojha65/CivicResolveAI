@@ -107,10 +107,10 @@ describe('ExecutiveAnalyticsPage', () => {
       expect(screen.getByText(/Volume & Priority Matrix/i)).toBeInTheDocument();
       expect(screen.getByText(/SLA Queue Aging/i)).toBeInTheDocument();
       expect(screen.getByText(/Confidence Calibration Bands/i)).toBeInTheDocument();
+      expect(screen.getByText('100')).toBeInTheDocument(); // total
     });
 
     // Check KPIs
-    expect(screen.getByText('100')).toBeInTheDocument(); // total
     expect(screen.getByText('75%')).toBeInTheDocument(); // automation rate
     expect(screen.getAllByText('40').length).toBeGreaterThan(0); // human reviewed volume
     expect(screen.getByText('92%')).toBeInTheDocument(); // sla compliance rate

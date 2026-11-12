@@ -27,7 +27,7 @@ public interface GrievanceRepository extends JpaRepository<Grievance, UUID> {
             WHERE (:status IS NULL OR g.status = :status)
               AND (:priority IS NULL OR g.priority = :priority)
               AND (:category IS NULL OR g.assignedCategory = :category)
-              AND (:search IS NULL OR LOWER(CAST(g.id AS string)) LIKE LOWER(CONCAT(:search, '%')) OR LOWER(g.assignedCategory) LIKE LOWER(CONCAT('%', :search, '%')))
+              AND (:search IS NULL OR LOWER(CAST(g.id AS text)) LIKE LOWER(CONCAT(:search, '%')) OR LOWER(g.assignedCategory) LIKE LOWER(CONCAT('%', :search, '%')))
             ORDER BY g.submittedAt DESC
             """)
     Page<Grievance> findAll(

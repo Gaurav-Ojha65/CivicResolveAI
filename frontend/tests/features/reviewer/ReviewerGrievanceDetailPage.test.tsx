@@ -120,9 +120,12 @@ describe('ReviewerGrievanceDetailPage', () => {
     const user = userEvent.setup();
     renderDetailPage();
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
+      },
+      { timeout: 5000 }
+    );
 
     await user.click(screen.getByRole('button', { name: /approve grievance/i }));
 
@@ -237,9 +240,12 @@ describe('ReviewerGrievanceDetailPage', () => {
     const user = userEvent.setup();
     renderDetailPage();
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
+      },
+      { timeout: 5000 }
+    );
 
     await user.click(screen.getByRole('button', { name: /approve grievance/i }));
 

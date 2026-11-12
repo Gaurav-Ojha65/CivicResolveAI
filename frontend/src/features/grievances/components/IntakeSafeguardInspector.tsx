@@ -9,6 +9,8 @@
  *  2. Client-Side Privacy Scanner — live PII detection status card.
  *  3. 4-Stage Compliance Workflow Stepper.
  *
+ * Design: Tremor/Shadcn enterprise bento-box cards with bg-white, 1px border-slate-200,
+ * rounded-xl, and shadow-sm.
  * All data is passed as props; no API calls or state of its own.
  */
 
@@ -41,7 +43,7 @@ function getNarrativeDepth(wordCount: number): DepthLevel {
   if (wordCount === 0) {
     return {
       minWords: 0, label: 'No narrative yet', color: 'text-slate-500',
-      barColor: 'bg-slate-400', pct: 0,
+      barColor: 'bg-slate-300', pct: 0,
       icon: <Circle className="w-4 h-4" aria-hidden="true" />,
     };
   }
@@ -55,13 +57,13 @@ function getNarrativeDepth(wordCount: number): DepthLevel {
   if (wordCount < 100) {
     return {
       minWords: 20, label: `Good detail for triage (${wordCount}/100 words)`,
-      color: 'text-teal-700', barColor: 'bg-teal-500', pct: 33 + Math.round(((wordCount - 20) / 80) * 34),
+      color: 'text-teal-700', barColor: 'bg-[#0F766E]', pct: 33 + Math.round(((wordCount - 20) / 80) * 34),
       icon: <CheckCircle2 className="w-4 h-4" aria-hidden="true" />,
     };
   }
   return {
     minWords: 100, label: `Comprehensive narrative (${wordCount} words)`,
-    color: 'text-emerald-700', barColor: 'bg-emerald-500', pct: Math.min(100, 67 + Math.round(((wordCount - 100) / 150) * 33)),
+    color: 'text-emerald-700', barColor: 'bg-emerald-600', pct: Math.min(100, 67 + Math.round(((wordCount - 100) / 150) * 33)),
     icon: <CheckCircle2 className="w-4 h-4" aria-hidden="true" />,
   };
 }
@@ -122,18 +124,18 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
   return (
     <aside
       aria-label="Intake safeguard inspector"
-      className="space-y-4"
+      className="space-y-6"
     >
-      {/* ── Narrative Context Depth ───────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+      {/* ── Narrative Context Depth Card ──────────────────────────────── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
-          <FileSearch className="w-4 h-4 text-teal-trust shrink-0" aria-hidden="true" />
-          <span className="text-xs font-bold text-ink-deep">Narrative Context Depth</span>
+          <FileSearch className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
+          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">Narrative Context Depth</span>
         </div>
 
         {/* Progress bar */}
         <div
-          className="h-3 w-full rounded-full bg-canvas border border-border overflow-hidden mb-2"
+          className="h-2.5 w-full rounded-full bg-slate-100 border border-slate-200 overflow-hidden mb-2.5"
           role="progressbar"
           aria-valuenow={depth.pct}
           aria-valuemin={0}
@@ -153,17 +155,17 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
         </div>
 
         {/* Guidance tiers */}
-        <div className="mt-3 space-y-1">
+        <div className="mt-4 space-y-1.5">
           {[
             { threshold: 20,  label: '20 words — minimum for AI routing', met: wordCount >= 20 },
             { threshold: 100, label: '100 words — comprehensive for reviewer', met: wordCount >= 100 },
           ].map(({ threshold, label, met }) => (
-            <div key={threshold} className="flex items-center gap-1.5 text-[11px]">
+            <div key={threshold} className="flex items-center gap-2 text-[11px]">
               {met
-                ? <CheckCircle2 className="w-3 h-3 text-teal-trust shrink-0" aria-hidden="true" />
-                : <Circle className="w-3 h-3 text-border shrink-0" aria-hidden="true" />
+                ? <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" aria-hidden="true" />
+                : <Circle className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />
               }
-              <span className={met ? 'text-teal-trust font-medium' : 'text-ink-muted'}>
+              <span className={met ? 'text-teal-800 font-semibold' : 'text-slate-500'}>
                 {label}
               </span>
             </div>
@@ -171,40 +173,40 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
         </div>
 
         {/* Character count */}
-        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px]">
-          <span className="text-ink-muted">Character usage</span>
-          <span className={`font-mono font-semibold ${charWarning ? 'text-semantic-warning-fg' : 'text-ink-muted'}`}>
+        <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">Character usage</span>
+          <span className={`font-mono font-semibold tabular-nums ${charWarning ? 'text-rose-600' : 'text-slate-600'}`}>
             {charCount} of {maxLength}
           </span>
         </div>
-        <div className="mt-1.5 h-1.5 w-full rounded-full bg-canvas border border-border overflow-hidden">
+        <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-300 ${charWarning ? 'bg-amber-500' : 'bg-teal-trust'}`}
+            className={`h-full rounded-full transition-all duration-300 ${charWarning ? 'bg-amber-500' : 'bg-[#0F766E]'}`}
             style={{ width: `${charPct}%` }}
           />
         </div>
       </div>
 
-      {/* ── Client-Side Privacy Scanner ───────────────────────────────── */}
+      {/* ── Client-Side Privacy Scanner Card ──────────────────────────── */}
       <div className={[
-        'rounded-xl border p-4 shadow-xs transition-all duration-300',
+        'rounded-xl border p-6 shadow-sm transition-all duration-300',
         hasPii
-          ? 'border-amber-300/80 bg-amber-50'
-          : 'border-border bg-surface',
+          ? 'border-amber-300 bg-amber-50/80'
+          : 'border-slate-200 bg-white',
       ].join(' ')}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2.5">
           {hasPii
             ? <EyeOff className="w-4 h-4 text-amber-700 shrink-0" aria-hidden="true" />
-            : <Eye className="w-4 h-4 text-teal-trust shrink-0" aria-hidden="true" />
+            : <Eye className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
           }
-          <span className={`text-xs font-bold ${hasPii ? 'text-amber-900' : 'text-ink-deep'}`}>
+          <span className={`text-xs font-bold uppercase tracking-wider ${hasPii ? 'text-amber-900' : 'text-slate-900'}`}>
             Client-Side Privacy Scanner
           </span>
           <span className={[
-            'ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold',
+            'ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold border',
             hasPii
-              ? 'bg-amber-200 text-amber-900'
-              : 'bg-teal-trust/10 text-teal-trust',
+              ? 'bg-amber-200 text-amber-900 border-amber-300'
+              : 'bg-teal-50 text-teal-700 border-teal-200',
           ].join(' ')}>
             {hasPii ? 'PII Detected' : 'Clear'}
           </span>
@@ -217,26 +219,26 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
             before submitting.
           </p>
         ) : (
-          <p className="text-xs text-ink-muted leading-relaxed">
+          <p className="text-xs text-slate-600 leading-relaxed">
             No sensitive number patterns detected in your narrative. Scan runs
             locally — your text is never sent to a third party for privacy analysis.
           </p>
         )}
 
-        <div className="mt-3 pt-3 border-t border-border/50 flex items-start gap-1.5">
-          <Lock className="w-3 h-3 text-ink-muted/60 shrink-0 mt-0.5" aria-hidden="true" />
-          <p className="text-[10px] text-ink-muted/80 leading-relaxed">
+        <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-start gap-1.5">
+          <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="text-[10px] text-slate-500 leading-relaxed">
             Privacy scan is 100% client-side. Checks SSN (XXX-XX-XXXX), 16-digit cards,
             and phone numbers via regex — no external service is called.
           </p>
         </div>
       </div>
 
-      {/* ── Compliance Workflow Stepper ───────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+      {/* ── Compliance Workflow Stepper Card ──────────────────────────── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <ShieldCheck className="w-4 h-4 text-teal-trust shrink-0" aria-hidden="true" />
-          <span className="text-xs font-bold text-ink-deep">Compliance Workflow</span>
+          <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
+          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">Compliance Workflow</span>
         </div>
 
         <ol className="space-y-0" aria-label="4-stage compliance workflow">
@@ -252,34 +254,34 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
                   <div className={[
                     'w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 text-xs font-bold transition-colors',
                     isActive
-                      ? 'bg-teal-trust border-teal-trust text-white'
-                      : 'bg-canvas border-border text-ink-muted',
+                      ? 'bg-[#0F766E] border-[#0F766E] text-white shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-400',
                   ].join(' ')}
                     aria-current={isActive ? 'step' : undefined}
                   >
                     {isActive
-                      ? <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      ? <CheckCircle2 className="w-3.5 h-3.5 text-white" aria-hidden="true" />
                       : <span>{stage.id}</span>
                     }
                   </div>
                   {!isLast && (
-                    <div className="w-px flex-1 bg-border mt-1 mb-1 min-h-[20px]" aria-hidden="true" />
+                    <div className="w-px flex-1 bg-slate-200 my-1 min-h-[20px]" aria-hidden="true" />
                   )}
                 </div>
 
                 {/* Step content */}
-                <div className={`pb-4 pt-0.5 min-w-0 ${isLast ? '' : ''}`}>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className={`text-xs font-bold ${isActive ? 'text-teal-trust' : 'text-ink-muted'}`}>
+                <div className="pb-4 pt-0.5 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-xs font-bold ${isActive ? 'text-teal-700' : 'text-slate-500'}`}>
                       {stage.title}
                     </span>
                     {isActive && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-teal-trust/10 text-teal-trust text-[9px] font-bold">
+                      <span className="px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 text-[9px] font-bold">
                         Current
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-ink-muted leading-relaxed">
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
                     {stage.description}
                   </p>
                 </div>
@@ -289,9 +291,9 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
         </ol>
 
         {/* AI disclosure footer */}
-        <div className="mt-2 pt-3 border-t border-border">
-          <p className="text-[10px] text-ink-muted leading-relaxed">
-            <strong className="text-ink-deep">AI Disclosure:</strong> Step 2 produces
+        <div className="mt-2 pt-3 border-t border-slate-100">
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            <strong className="text-slate-700">AI Disclosure:</strong> Step 2 produces
             uncalibrated probability estimates and a preliminary routing suggestion —
             not a legal determination. All routing is subject to human reviewer
             adjudication before any final decision.

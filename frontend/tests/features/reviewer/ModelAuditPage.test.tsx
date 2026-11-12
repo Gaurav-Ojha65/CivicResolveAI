@@ -140,9 +140,9 @@ describe('ModelAuditPage', () => {
       expect(
         screen.getByText(/AI Audit & Model Benchmark Center/i)
       ).toBeInTheDocument();
+      expect(screen.getByText('120')).toBeInTheDocument(); // total adjudicated
     });
 
-    expect(screen.getByText('120')).toBeInTheDocument(); // total adjudicated
     expect(screen.getAllByText('85.0%').length).toBeGreaterThanOrEqual(1); // agreement rate
     expect(screen.getByText('18')).toBeInTheDocument(); // overridden
     expect(screen.getByText('Safety Flag Triggers')).toBeInTheDocument();
@@ -247,6 +247,7 @@ describe('ModelAuditPage', () => {
       expect(
         screen.getByText(/AI Audit & Model Benchmark Center/i)
       ).toBeInTheDocument();
+      expect(screen.getByText(/n = 6,363 fit \/ n = 6,363 eval/i)).toBeInTheDocument();
     });
 
     // 1. Assert absence of raw LaTeX $N= strings

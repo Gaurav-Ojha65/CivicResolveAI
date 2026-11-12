@@ -158,7 +158,11 @@ public class GrievanceService {
         int safeSize = Math.min(size, 100);
         Pageable pageable = PageRequest.of(page, safeSize);
         String safeSearch = (search != null && !search.isBlank()) ? search.trim() : null;
-        return grievanceRepository.findAll(status, priority, category, safeSearch, pageable)
+        if (safeSearch != null) {
+            return grievanceRepository.findAll(status, priority, category, safeSearch, pageable)
+                    .map(GrievanceResponse::from);
+        }
+        return grievanceRepository.findAll(status, priority, category, pageable)
                 .map(GrievanceResponse::from);
     }
 
@@ -168,7 +172,10 @@ public class GrievanceService {
                                         String category,
                                         int page,
                                         int size) {
-        return list(status, priority, category, null, page, size);
+        int safeSize = Math.min(size, 100);
+        Pageable pageable = PageRequest.of(page, safeSize);
+        return grievanceRepository.findAll(status, priority, category, pageable)
+                .map(GrievanceResponse::from);
     }
 
     @Transactional(readOnly = true)
