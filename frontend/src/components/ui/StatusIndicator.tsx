@@ -154,34 +154,34 @@ function getPriorityConfig(priority: TriagePriority) {
       return {
         label: 'Critical Priority',
         classes:
-          'bg-semantic-danger-bg text-semantic-danger-fg border-semantic-danger-border font-semibold',
+          'bg-red-50 text-red-800 border-red-200 font-semibold',
         icon: AlertTriangle,
       };
     case 'HIGH':
       return {
         label: 'High Priority',
         classes:
-          'bg-semantic-warning-bg text-semantic-warning-fg border-semantic-warning-border font-medium',
+          'bg-amber-50 text-amber-900 border-amber-200 font-medium',
         icon: ArrowUp,
       };
     case 'MEDIUM':
       return {
         label: 'Medium Priority',
         classes:
-          'bg-semantic-info-bg text-semantic-info-fg border-semantic-info-border',
+          'bg-blue-50 text-blue-800 border-blue-200 font-medium',
         icon: Minus,
       };
     case 'LOW':
       return {
         label: 'Low Priority',
         classes:
-          'bg-canvas text-ink-muted border-border',
+          'bg-slate-100 text-slate-700 border-slate-200 font-medium',
         icon: ArrowDown,
       };
     default:
       return {
         label: String(priority),
-        classes: 'bg-canvas text-ink-muted border-border',
+        classes: 'bg-slate-100 text-slate-700 border-slate-200 font-medium',
         icon: Minus,
       };
   }

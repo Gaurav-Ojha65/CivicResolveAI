@@ -36,7 +36,8 @@ describe('StatusIndicator Component', () => {
     render(<StatusIndicator priority="CRITICAL" />);
     const indicator = screen.getByText('Critical Priority');
     expect(indicator).toBeInTheDocument();
-    expect(indicator.parentElement?.className).toContain('bg-semantic-danger-bg');
+    expect(indicator.parentElement?.className).toContain('bg-red-50');
+    expect(indicator.parentElement?.className).toContain('text-red-800');
     expect(indicator.parentElement?.querySelector('svg')).toBeInTheDocument();
   });
 
