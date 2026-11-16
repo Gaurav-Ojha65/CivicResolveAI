@@ -116,21 +116,21 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
       isRefreshing={loading}
     >
       <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-        {/* Banner: Disclaimer & Action Bar */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        {/* Banner: Disclaimer & Action Bar (Clean White Enterprise Card) */}
+        <div className="bg-white border border-line rounded-[10px] p-5 text-ink flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-card">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200">
                 <Activity size={12} />
-                Live Telemetry
+                Live Queue Data
               </span>
-              <span className="text-xs text-slate-400">Database SQL Group-By Aggregations</span>
+              <span className="text-xs text-slate-500 font-mono">Database SQL Group-By Aggregations</span>
             </div>
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-ink font-serif">
               Grievance Intake &amp; AI Triage Intelligence Hub
             </h1>
-            <p className="text-xs text-slate-400 flex items-center gap-1.5">
-              <Info size={13} className="text-teal-400 flex-shrink-0" />
+            <p className="text-xs text-slate-600 flex items-center gap-1.5">
+              <Info size={13} className="text-teal-700 flex-shrink-0" />
               <span>Uncalibrated model probability estimates; operational telemetry and decision support only.</span>
             </p>
           </div>
@@ -140,7 +140,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               type="button"
               onClick={handleSeedDemoData}
               disabled={seeding || loading}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white shadow-md shadow-teal-950/40 disabled:opacity-50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white shadow-2xs disabled:opacity-50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500"
               title="Populate 32 authentic CFPB complaints across all 8 product categories and 14 days"
             >
               {seeding ? (
@@ -159,7 +159,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               type="button"
               onClick={fetchTelemetry}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-line shadow-2xs transition-colors"
             >
               <RotateCcw size={13} className={loading ? 'animate-spin' : ''} />
               <span>Refresh</span>
@@ -169,15 +169,15 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
 
         {/* Seed Success Banner */}
         {seedSuccessMessage && (
-          <div className="p-4 rounded-xl bg-teal-950/40 border border-teal-500/30 text-teal-200 flex items-center justify-between text-xs animate-in fade-in">
+          <div className="p-4 rounded-[10px] bg-teal-50 border border-teal-200 text-teal-900 flex items-center justify-between text-xs animate-in fade-in">
             <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-teal-400" />
+              <Sparkles size={16} className="text-teal-700" />
               <span>{seedSuccessMessage}</span>
             </div>
             <button
               type="button"
               onClick={() => setSeedSuccessMessage(null)}
-              className="text-teal-400 hover:text-teal-200 underline text-xs"
+              className="text-teal-700 hover:text-teal-900 underline text-xs font-medium"
             >
               Dismiss
             </button>
@@ -186,15 +186,15 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
 
         {/* Error Notification */}
         {error && (
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center justify-between text-xs">
+          <div className="p-4 rounded-[10px] bg-red-50 border border-red-200 text-red-800 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 flex-shrink-0" />
+              <AlertTriangle size={16} className="text-red-600 flex-shrink-0" />
               <span>{error}</span>
             </div>
             <button
               type="button"
               onClick={fetchTelemetry}
-              className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 rounded text-rose-900 font-semibold"
+              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 rounded text-red-900 font-semibold"
             >
               Retry
             </button>
@@ -204,109 +204,112 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
         {/* ─── ROW 1: 4 EXECUTIVE METRIC CARDS ───────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total Volume */}
-          <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs relative overflow-hidden group">
+          <div className="p-5 rounded-[10px] bg-white border border-line shadow-card relative overflow-hidden group">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ingested</span>
-              <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-                <Layers size={18} />
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Ingested</span>
+              <div className="p-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                <Layers size={16} />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              <span className="text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
                 {data ? data.totalComplaints.toLocaleString() : '—'}
               </span>
-              <span className="text-xs text-slate-500">cases</span>
+              <span className="text-xs text-slate-500 font-mono">cases</span>
             </div>
-            <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
-              <span className="font-semibold text-teal-600">{data?.pendingReview ?? 0}</span>
+            <p className="mt-2 text-xs text-slate-600 flex items-center gap-1">
+              <span className="font-semibold text-teal-700 tabular-nums">{data?.pendingReview ?? 0}</span>
               <span>currently in triage queue</span>
             </p>
           </div>
 
           {/* Card 2: Auto-Routing Automation Rate */}
-          <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs relative overflow-hidden group">
+          <div className="p-5 rounded-[10px] bg-white border border-line shadow-card relative overflow-hidden group">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Automation Rate</span>
-              <div className="p-2 rounded-xl bg-teal-50 text-teal-600">
-                <Zap size={18} />
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Automation Rate</span>
+              <div className="p-2 rounded-lg bg-teal-50 text-teal-700 border border-teal-200">
+                <Zap size={16} />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              <span className="text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
                 {autoRoutePct}%
               </span>
-              <span className="text-xs text-emerald-600 font-semibold flex items-center">
+              <span className="text-xs text-emerald-700 font-semibold flex items-center">
                 <ArrowUpRight size={14} />
                 Straight-Through
               </span>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {data?.autoRouted ?? 0} cases routed with zero human touch
+            <p className="mt-2 text-xs text-slate-600">
+              <span className="font-mono tabular-nums">{data?.autoRouted ?? 0}</span> cases routed with zero human touch
             </p>
           </div>
 
           {/* Card 3: Adjudicated Count */}
-          <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs relative overflow-hidden group">
+          <div className="p-5 rounded-[10px] bg-white border border-line shadow-card relative overflow-hidden group">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Adjudicated Volume</span>
-              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                <CheckCircle2 size={18} />
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Adjudicated Volume</span>
+              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 size={16} />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              <span className="text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
                 {data?.humanReviewed ?? 0}
               </span>
-              <span className="text-xs text-slate-500 font-medium">cases reviewed</span>
+              <span className="text-xs text-slate-500 font-mono">cases reviewed</span>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-slate-600">
               manual reviewer decisions recorded
             </p>
           </div>
 
           {/* Card 4: SLA Compliance Rate */}
-          <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs relative overflow-hidden group">
+          <div className="p-5 rounded-[10px] bg-white border border-line shadow-card relative overflow-hidden group">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">SLA Compliance</span>
-              <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-                <Clock size={18} />
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">SLA Compliance</span>
+              <div className="p-2 rounded-lg bg-purple-50 text-purple-700 border border-purple-200">
+                <Clock size={16} />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              <span className="text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
                 {slaPct}%
               </span>
-              <span className="text-xs text-slate-500">on-track</span>
+              <span className="text-xs text-slate-500 font-mono">on-track</span>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              cases resolved within 24-hour target
+            <p className="mt-2 text-xs text-slate-600">
+              cases resolved within target SLA
             </p>
           </div>
         </div>
 
         {/* ─── ROW 2: MULTI-SERIES INTAKE & TRIAGE TREND (SVG AREA CHART) ─── */}
-        <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-line">
             <div>
               <div className="flex items-center gap-2">
-                <TrendingUp size={18} className="text-teal-600" />
-                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                <TrendingUp size={18} className="text-teal-700" />
+                <h2 className="text-sm font-bold text-ink uppercase tracking-wider">
                   14-Day Complaint Velocity &amp; Adjudication Trend
                 </h2>
+                <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                  Live Queue Data
+                </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-600 mt-0.5">
                 Comparison of raw complaint volume received, straight-through auto-routings, and human reviewer decisions.
               </p>
             </div>
 
             {/* Legend */}
-            <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
+            <div className="flex items-center gap-4 text-xs font-medium text-slate-700">
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-teal-500 inline-block" />
+                <span className="w-3 h-3 rounded-full bg-teal-600 inline-block" />
                 <span>Total Received</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-sky-400 inline-block" />
+                <span className="w-3 h-3 rounded-full bg-sky-500 inline-block" />
                 <span>Auto-Routed</span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -316,22 +319,18 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* SVG Multi-Series Chart Container */}
-          <div className="relative w-full overflow-hidden bg-slate-950 rounded-xl p-4 text-white">
+          {/* SVG Multi-Series Chart Container (Light Enterprise Theme) */}
+          <div className="relative w-full overflow-hidden bg-white border border-line rounded-[10px] p-4 text-ink">
             {trendPoints ? (
               <div className="w-full">
                 <svg
                   viewBox={`0 0 ${trendPoints.width} ${trendPoints.height}`}
-                  className="w-full h-48 sm:h-56 overflow-visible"
+                  className="w-full h-48 sm:h-56 overflow-visible select-none"
                 >
                   <defs>
                     <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.0" />
-                    </linearGradient>
-                    <linearGradient id="lineTotalGrad" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#2dd4bf" />
-                      <stop offset="100%" stopColor="#0d9488" />
+                      <stop offset="0%" stopColor="#0D9488" stopOpacity="0.18" />
+                      <stop offset="100%" stopColor="#0D9488" stopOpacity="0.02" />
                     </linearGradient>
                   </defs>
 
@@ -345,11 +344,11 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                           y1={y}
                           x2={trendPoints.width - 20}
                           y2={y}
-                          stroke="#334155"
+                          stroke="#E3E7ED"
                           strokeDasharray="3 3"
                           strokeWidth="1"
                         />
-                        <text x={24} y={y - 4} fill="#64748b" fontSize="9" fontFamily="monospace">
+                        <text x={24} y={y - 4} fill="#64748B" fontSize="11" fontFamily="monospace" className="tabular-nums">
                           {Math.round(pct * trendPoints.maxVal)}
                         </text>
                       </g>
@@ -363,7 +362,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <path
                     d={trendPoints.totalPath}
                     fill="none"
-                    stroke="#14b8a6"
+                    stroke="#0D9488"
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -373,7 +372,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <path
                     d={trendPoints.autoPath}
                     fill="none"
-                    stroke="#38bdf8"
+                    stroke="#0284C7"
                     strokeWidth="2"
                     strokeDasharray="4 3"
                     strokeLinecap="round"
@@ -383,7 +382,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <path
                     d={trendPoints.reviewPath}
                     fill="none"
-                    stroke="#818cf8"
+                    stroke="#6366F1"
                     strokeWidth="2"
                     strokeLinecap="round"
                   />
@@ -402,8 +401,8 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                           cx={pt.x}
                           cy={pt.yTotal}
                           r={isHovered ? 6 : 3.5}
-                          fill={isHovered ? '#ffffff' : '#14b8a6'}
-                          stroke="#0f172a"
+                          fill={isHovered ? '#0F766E' : '#0D9488'}
+                          stroke="#FFFFFF"
                           strokeWidth="2"
                         />
                         {/* Hover vertical guide */}
@@ -413,7 +412,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                             y1={trendPoints.paddingY}
                             x2={pt.x}
                             y2={trendPoints.height - trendPoints.paddingY}
-                            stroke="#5eead4"
+                            stroke="#0D9488"
                             strokeWidth="1"
                             strokeDasharray="2 2"
                           />
@@ -423,9 +422,10 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                           x={pt.x}
                           y={trendPoints.height - 4}
                           textAnchor="middle"
-                          fill="#94a3b8"
-                          fontSize="9"
+                          fill="#64748B"
+                          fontSize="11"
                           fontFamily="monospace"
+                          className="tabular-nums"
                         >
                           {pt.date}
                         </text>
@@ -436,7 +436,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
 
                 {/* Hover Tooltip Box */}
                 {hoveredTrendIdx !== null && trendPoints.coords[hoveredTrendIdx] && (
-                  <div className="mt-3 p-3 rounded-lg bg-slate-900 border border-slate-700 text-xs flex flex-wrap items-center justify-between gap-4 animate-in fade-in">
+                  <div className="mt-3 p-3 rounded-lg bg-ink border border-slate-700 text-xs text-white flex flex-wrap items-center justify-between gap-4 animate-in fade-in">
                     <div>
                       <span className="text-slate-400 font-mono">Date: </span>
                       <span className="font-bold text-white">{trendPoints.coords[hoveredTrendIdx].date}</span>
@@ -444,15 +444,15 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                     <div className="flex items-center gap-4">
                       <div>
                         <span className="text-teal-400 font-semibold">Intake Count: </span>
-                        <span className="font-mono text-white">{trendPoints.coords[hoveredTrendIdx].intakeCount}</span>
+                        <span className="font-mono text-white tabular-nums">{trendPoints.coords[hoveredTrendIdx].intakeCount}</span>
                       </div>
                       <div>
                         <span className="text-sky-400 font-semibold">Auto-Routed: </span>
-                        <span className="font-mono text-white">{trendPoints.coords[hoveredTrendIdx].autoRoutedCount}</span>
+                        <span className="font-mono text-white tabular-nums">{trendPoints.coords[hoveredTrendIdx].autoRoutedCount}</span>
                       </div>
                       <div>
                         <span className="text-indigo-400 font-semibold">Human Reviewed: </span>
-                        <span className="font-mono text-white">{trendPoints.coords[hoveredTrendIdx].humanReviewedCount}</span>
+                        <span className="font-mono text-white tabular-nums">{trendPoints.coords[hoveredTrendIdx].humanReviewedCount}</span>
                       </div>
                     </div>
                   </div>
@@ -460,7 +460,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
             ) : (
               <div className="h-48 flex items-center justify-center text-slate-500 text-xs">
-                No trend data available. Click "Seed Realistic CFPB Demo" above to populate historical telemetry.
+                No trend data available. Click &quot;Seed Realistic CFPB Demo&quot; above to populate historical telemetry.
               </div>
             )}
           </div>
@@ -469,25 +469,28 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
         {/* ─── ROW 3: CATEGORY VOLUME & SEVERITY STACKED MATRIX ──────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: 8-Category Stacked Breakdown (2 cols) */}
-          <div className="lg:col-span-2 p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="lg:col-span-2 p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-line">
               <div>
                 <div className="flex items-center gap-2">
-                  <BarChart3 size={18} className="text-teal-600" />
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  <BarChart3 size={18} className="text-teal-700" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
                     Volume &amp; Priority Matrix (All 8 CFPB Categories)
                   </h3>
+                  <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                    Live Queue Data
+                  </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-600 mt-0.5">
                   Breakdown by volume and rule-based triage priority distribution.
                 </p>
               </div>
 
               {/* Priority Legend */}
-              <div className="flex items-center gap-3 text-[11px] font-medium text-slate-600">
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-rose-500 inline-block" /> Critical</span>
+              <div className="flex items-center gap-3 text-xs font-medium text-slate-700">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-600 inline-block" /> Critical</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block" /> High</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-teal-500 inline-block" /> Medium</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-teal-600 inline-block" /> Medium</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-slate-400 inline-block" /> Low</span>
               </div>
             </div>
@@ -504,12 +507,12 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   return (
                     <div key={cat.category} className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-800 truncate max-w-[280px] sm:max-w-md" title={cat.category}>
+                        <span className="font-semibold text-ink truncate max-w-[280px] sm:max-w-md" title={cat.category}>
                           {cat.category}
                         </span>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="font-mono text-slate-900 font-bold">{cat.total}</span>
-                          <span className="text-[10px] text-slate-400">cases</span>
+                          <span className="font-mono text-ink font-bold tabular-nums">{cat.total}</span>
+                          <span className="text-xs text-slate-500">cases</span>
                         </div>
                       </div>
 
@@ -518,7 +521,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                         {critPct > 0 && (
                           <div
                             style={{ width: `${critPct}%` }}
-                            className="bg-rose-500 h-full transition-all"
+                            className="bg-red-600 h-full transition-all"
                             title={`Critical: ${cat.critical}`}
                           />
                         )}
@@ -532,7 +535,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                         {medPct > 0 && (
                           <div
                             style={{ width: `${medPct}%` }}
-                            className="bg-teal-500 h-full transition-all"
+                            className="bg-teal-600 h-full transition-all"
                             title={`Medium: ${cat.medium}`}
                           />
                         )}
@@ -548,7 +551,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   );
                 })
               ) : (
-                <div className="p-8 text-center text-slate-400 text-xs">
+                <div className="p-8 text-center text-slate-500 text-xs">
                   No category records available. Seed demo data to preview the full 8-category distribution.
                 </div>
               )}
@@ -558,81 +561,89 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
           {/* Right: SLA Queue Health & Confidence Calibration (1 col) */}
           <div className="space-y-6">
             {/* SLA Health Card */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
+            <div className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Clock size={18} className="text-teal-600" />
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  <Clock size={18} className="text-teal-700" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
                     SLA Queue Aging
                   </h3>
+                  <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                    Live Queue Data
+                  </span>
                 </div>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
                   Target: &lt; 24h
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-100">
-                  <span className="text-[11px] font-medium text-emerald-800 block">&lt; 24 Hours</span>
-                  <span className="text-xl font-bold text-emerald-900 mt-1 block font-mono">
+                <div className="p-3 rounded-lg bg-emerald-50/70 border border-emerald-200">
+                  <span className="text-xs font-semibold text-emerald-900 block">&lt; 24 Hours</span>
+                  <span className="text-xl font-bold text-emerald-900 mt-1 block font-mono tabular-nums">
                     {data?.slaAgingBreakdown.onTrack ?? 0}
                   </span>
-                  <span className="text-[10px] text-emerald-700 font-medium">On Track</span>
+                  <span className="text-xs text-emerald-800 font-medium">On Track</span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-100">
-                  <span className="text-[11px] font-medium text-amber-800 block">24 – 72 Hours</span>
-                  <span className="text-xl font-bold text-amber-900 mt-1 block font-mono">
+                <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200">
+                  <span className="text-xs font-semibold text-amber-900 block">24 – 72 Hours</span>
+                  <span className="text-xl font-bold text-amber-900 mt-1 block font-mono tabular-nums">
                     {data?.slaAgingBreakdown.atRisk ?? 0}
                   </span>
-                  <span className="text-[10px] text-amber-700 font-medium">At Risk</span>
+                  <span className="text-xs text-amber-800 font-medium">At Risk</span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-rose-50/70 border border-rose-100">
-                  <span className="text-[11px] font-medium text-rose-800 block">&gt; 72 Hours</span>
-                  <span className="text-xl font-bold text-rose-900 mt-1 block font-mono">
+                <div className="p-3 rounded-lg bg-red-50/70 border border-red-200">
+                  <span className="text-xs font-semibold text-red-900 block">&gt; 72 Hours</span>
+                  <span className="text-xl font-bold text-red-900 mt-1 block font-mono tabular-nums">
                     {data?.slaAgingBreakdown.breached ?? 0}
                   </span>
-                  <span className="text-[10px] text-rose-700 font-medium">Breached</span>
+                  <span className="text-xs text-red-800 font-medium">Breached</span>
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-500 pt-1">
+              <p className="text-xs text-slate-600 pt-1">
                 Aging calculated dynamically against pending review cases ({data?.slaAgingBreakdown.totalPending ?? 0} pending). Cases exceeding 72 hours trigger escalation alerts.
               </p>
             </div>
 
             {/* Confidence & Decision Margin Calibration */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck size={18} className="text-teal-600" />
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  Confidence Calibration Bands
-                </h3>
+            <div className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-teal-700" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
+                    Confidence Calibration Bands
+                  </h3>
+                </div>
+                <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                  Live Queue Data
+                </span>
               </div>
 
               <div className="space-y-2.5 text-xs">
                 {/* Band 1: < 0.55 */}
                 <div>
-                  <div className="flex justify-between text-slate-600 mb-1">
-                    <span className="font-medium text-rose-700">&lt; 0.55 (Flagged for Review)</span>
-                    <span className="font-mono font-bold text-slate-900">{data?.confidenceSentimentBuckets.confidenceUnder55 ?? 0}</span>
+                  <div className="flex justify-between text-slate-700 mb-1">
+                    <span className="font-medium text-red-800">&lt; 0.55 (Flagged for Review)</span>
+                    <span className="font-mono font-bold text-ink tabular-nums">{data?.confidenceSentimentBuckets.confidenceUnder55 ?? 0}</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div
                       style={{
                         width: `${Math.min(100, ((data?.confidenceSentimentBuckets.confidenceUnder55 ?? 0) / Math.max(1, data?.totalComplaints ?? 1)) * 100)}%`,
                       }}
-                      className="h-full bg-rose-500"
+                      className="h-full bg-red-600"
                     />
                   </div>
                 </div>
 
                 {/* Band 2: 0.55 - 0.75 */}
                 <div>
-                  <div className="flex justify-between text-slate-600 mb-1">
-                    <span className="font-medium text-amber-700">0.55 – 0.75 (Moderate)</span>
-                    <span className="font-mono font-bold text-slate-900">{data?.confidenceSentimentBuckets.confidence55To75 ?? 0}</span>
+                  <div className="flex justify-between text-slate-700 mb-1">
+                    <span className="font-medium text-amber-800">0.55 – 0.75 (Moderate)</span>
+                    <span className="font-mono font-bold text-ink tabular-nums">{data?.confidenceSentimentBuckets.confidence55To75 ?? 0}</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div
@@ -646,25 +657,25 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
 
                 {/* Band 3: 0.75 - 0.90 */}
                 <div>
-                  <div className="flex justify-between text-slate-600 mb-1">
-                    <span className="font-medium text-teal-700">0.75 – 0.90 (High Confidence)</span>
-                    <span className="font-mono font-bold text-slate-900">{data?.confidenceSentimentBuckets.confidence75To90 ?? 0}</span>
+                  <div className="flex justify-between text-slate-700 mb-1">
+                    <span className="font-medium text-teal-800">0.75 – 0.90 (High Confidence)</span>
+                    <span className="font-mono font-bold text-ink tabular-nums">{data?.confidenceSentimentBuckets.confidence75To90 ?? 0}</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div
                       style={{
                         width: `${Math.min(100, ((data?.confidenceSentimentBuckets.confidence75To90 ?? 0) / Math.max(1, data?.totalComplaints ?? 1)) * 100)}%`,
                       }}
-                      className="h-full bg-teal-500"
+                      className="h-full bg-teal-600"
                     />
                   </div>
                 </div>
 
                 {/* Band 4: > 0.90 */}
                 <div>
-                  <div className="flex justify-between text-slate-600 mb-1">
-                    <span className="font-medium text-emerald-700">&gt; 0.90 (Straight-Through Routing)</span>
-                    <span className="font-mono font-bold text-slate-900">{data?.confidenceSentimentBuckets.confidenceOver90 ?? 0}</span>
+                  <div className="flex justify-between text-slate-700 mb-1">
+                    <span className="font-medium text-emerald-800">&gt; 0.90 (Straight-Through Routing)</span>
+                    <span className="font-mono font-bold text-ink tabular-nums">{data?.confidenceSentimentBuckets.confidenceOver90 ?? 0}</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div
@@ -678,9 +689,9 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
 
               {/* Margin Separation Insight */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                <span>Narrow Margin (&lt; 0.15): <strong className="text-amber-700">{data?.confidenceSentimentBuckets.narrowMargin ?? 0}</strong></span>
-                <span>Decisive Margin (&ge; 0.15): <strong className="text-emerald-700">{data?.confidenceSentimentBuckets.clearMargin ?? 0}</strong></span>
+              <div className="pt-3 border-t border-line flex items-center justify-between text-xs text-slate-600 font-mono tabular-nums">
+                <span>Narrow Margin (&lt; 0.15): <strong className="text-amber-800">{data?.confidenceSentimentBuckets.narrowMargin ?? 0}</strong></span>
+                <span>Decisive Margin (&ge; 0.15): <strong className="text-emerald-800">{data?.confidenceSentimentBuckets.clearMargin ?? 0}</strong></span>
               </div>
             </div>
           </div>
