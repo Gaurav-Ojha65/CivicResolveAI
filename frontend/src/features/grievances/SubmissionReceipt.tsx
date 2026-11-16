@@ -31,6 +31,12 @@ interface SubmissionReceiptProps {
  * - Print formatting with print:hidden action bar
  */
 export const SubmissionReceipt: React.FC<SubmissionReceiptProps> = ({ result }) => {
+  const receiptHeadingRef = React.useRef<HTMLHeadingElement | null>(null);
+
+  React.useEffect(() => {
+    receiptHeadingRef.current?.focus();
+  }, []);
+
   const [copiedId, setCopiedId] = useState(false);
   const [copyIdError, setCopyIdError] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
@@ -158,7 +164,11 @@ export const SubmissionReceipt: React.FC<SubmissionReceiptProps> = ({ result }) 
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-trust/10 text-teal-trust text-[10px] font-bold tracking-wider uppercase border border-teal-trust/20">
             Cryptographically Recorded
           </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-ink-deep tracking-tight font-sans">
+          <h2
+            ref={receiptHeadingRef}
+            tabIndex={-1}
+            className="text-xl sm:text-2xl font-extrabold text-ink-deep tracking-tight font-sans outline-none focus:ring-2 focus:ring-teal-600/30 rounded"
+          >
             Your complaint has been received.
           </h2>
           <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">

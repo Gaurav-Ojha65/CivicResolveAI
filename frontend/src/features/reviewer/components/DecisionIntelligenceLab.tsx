@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, type Variants } from 'framer-motion';
 import {
   Sparkles,
   RotateCcw,
@@ -27,6 +28,26 @@ interface DecisionIntelligenceLabProps {
   grievanceId: string;
   onAppendReviewNote: (text: string) => void;
 }
+
+const tokenContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.03, // 30ms delay per token
+    },
+  },
+};
+
+const tokenItemVariants: Variants = {
+  hidden: { opacity: 0, y: 4, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring' as const, stiffness: 400, damping: 25 },
+  },
+};
 
 export const SYNTHETIC_PRESETS = [
   {
@@ -268,6 +289,57 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                 ))}
               </div>
             </div>
+
+            {/* TF-IDF Linear Attribution Feature Tokens */}
+            {originalPrediction?.explanation && (
+              ((originalPrediction.explanation.topPositiveFeatures && originalPrediction.explanation.topPositiveFeatures.length > 0) ||
+               (originalPrediction.explanation.topNegativeFeatures && originalPrediction.explanation.topNegativeFeatures.length > 0)) && (
+                <div className="space-y-1.5 p-3 bg-slate-50/80 rounded-xl border border-slate-200">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <Scale size={13} className="text-teal-700" />
+                      TF-IDF Linear Attribution Tokens
+                    </span>
+                    <span className="text-slate-400 font-mono text-[10px]">
+                      {originalPrediction.explanation.predictedClass} Drivers
+                    </span>
+                  </div>
+                  <motion.div
+                    variants={tokenContainerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="flex flex-wrap items-center gap-1.5"
+                  >
+                    {originalPrediction.explanation.topPositiveFeatures?.slice(0, 6).map((feat, idx) => (
+                      <motion.span
+                        key={`lab-pos-${idx}-${feat.feature}`}
+                        variants={tokenItemVariants}
+                        title={`Contribution: +${feat.contribution.toFixed(4)}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs tabular-nums"
+                      >
+                        <span>+{feat.feature}</span>
+                        <span className="text-[10px] text-teal-600 font-bold opacity-80">
+                          {feat.contribution > 0 ? `+${feat.contribution.toFixed(2)}` : feat.contribution.toFixed(2)}
+                        </span>
+                      </motion.span>
+                    ))}
+                    {originalPrediction.explanation.topNegativeFeatures?.slice(0, 4).map((feat, idx) => (
+                      <motion.span
+                        key={`lab-neg-${idx}-${feat.feature}`}
+                        variants={tokenItemVariants}
+                        title={`Contribution: ${feat.contribution.toFixed(4)}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs tabular-nums"
+                      >
+                        <span>{feat.feature}</span>
+                        <span className="text-[10px] text-rose-600 font-bold opacity-80">
+                          {feat.contribution.toFixed(2)}
+                        </span>
+                      </motion.span>
+                    ))}
+                  </motion.div>
+                </div>
+              )
+            )}
 
             {/* Editable Textarea */}
             <div className="space-y-1.5">

@@ -11,6 +11,8 @@ import {
   Shield,
   EyeOff,
   CheckCircle2,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { submitGrievance } from '../../lib/api/endpoints';
 import { ApiError } from '../../lib/errors/api-error';
@@ -93,14 +95,23 @@ export const SubmitGrievancePage: React.FC = () => {
   >(null);
   const [serverErrors, setServerErrors] = useState<string[]>([]);
 
+  const [loadedPresetName, setLoadedPresetName] = useState<string | null>(null);
+  const [isHeroExpanded, setIsHeroExpanded] = useState(false);
+
   const hasPii = useMemo(() => detectPii(description), [description]);
   const wordCount = useMemo(() => {
     const trimmed = description.trim();
     return trimmed ? trimmed.split(/\s+/).length : 0;
   }, [description]);
 
-  const handleLoadPreset = (text: string) => {
+  const handleLoadPreset = (text: string, label?: string) => {
     setDescription(text);
+    if (label) {
+      setLoadedPresetName(label);
+    } else {
+      const found = DEMO_PRESETS.find((p) => p.text === text);
+      setLoadedPresetName(found ? found.label : 'Sample CFPB Scenario');
+    }
     setValidationErrors([]);
     setServerErrors([]);
   };
@@ -256,16 +267,8 @@ export const SubmitGrievancePage: React.FC = () => {
       <main id="main-content" className="flex-1 w-full">
         {/* Unified Container: Dark hero, Stepper, and Form Cards sharing exact same max-w-6xl */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-8 pb-16">
-          {/* ── Interactive Triage Hero ─────────────────────────────────────── */}
-          <InteractiveTriageHero
-            onLoadScenario={(presetId) => {
-              const preset = DEMO_PRESETS.find((p) => p.id === presetId);
-              if (preset) handleLoadPreset(preset.text);
-            }}
-          />
-
-          {/* ── Vertical Rhythm: Heading & 1-2-3 Stepper between Hero & Form ── */}
-          <div className="mt-12 mb-8">
+          {/* ── Page Header: Form-First Experience ─────────────────────────── */}
+          <div className="mb-8">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 pb-6 border-b border-slate-200">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-semibold mb-2.5 border border-teal-200">
@@ -280,23 +283,20 @@ export const SubmitGrievancePage: React.FC = () => {
                   classified automatically and then reviewed by a trained member of staff.
                   No personal account is required.
                 </p>
-              </div>
-
-              {/* Intake Lifecycle Steps Bar */}
-              <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-4 text-xs shrink-0">
-                <div className="flex items-center gap-2 text-teal-700 font-semibold">
-                  <span className="w-5 h-5 rounded-full bg-[#0F766E] text-white flex items-center justify-center text-[10px] font-bold">1</span>
-                  <span>Intake Details</span>
-                </div>
-                <span className="text-slate-300 text-xs sm:inline hidden">─────────</span>
-                <div className="flex items-center gap-2 text-slate-500 font-medium">
-                  <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center text-[10px] font-bold">2</span>
-                  <span className="hidden sm:inline">NLP Classification</span>
-                </div>
-                <span className="text-slate-300 text-xs sm:inline hidden">─────────</span>
-                <div className="flex items-center gap-2 text-slate-500 font-medium">
-                  <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center text-[10px] font-bold">3</span>
-                  <span className="hidden sm:inline">Human Adjudication</span>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHeroExpanded(true);
+                      setTimeout(() => {
+                        document.getElementById('triage-engine-preview')?.scrollIntoView({ behavior: 'smooth' });
+                      }, 50);
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800 transition-colors cursor-pointer group"
+                  >
+                    <span>See how automated triage works</span>
+                    <ChevronDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -414,10 +414,10 @@ export const SubmitGrievancePage: React.FC = () => {
                       {/* 3 Labeled Demo Preset Chips */}
                       <div className="mb-4 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
                             Load Sample CFPB Scenario:
                           </span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-xs text-slate-500">
                             Click to populate test narrative
                           </span>
                         </div>
@@ -426,11 +426,11 @@ export const SubmitGrievancePage: React.FC = () => {
                             <button
                               key={preset.id}
                               type="button"
-                              onClick={() => handleLoadPreset(preset.text)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-teal-200 bg-teal-50/70 text-teal-800 hover:bg-teal-100 hover:border-teal-300 transition-all shadow-2xs"
+                              onClick={() => handleLoadPreset(preset.text, preset.label)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-teal-200 bg-teal-50/70 text-teal-800 hover:bg-teal-100 hover:border-teal-300 transition-all shadow-2xs cursor-pointer"
                             >
                               <span>{preset.label}</span>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-white border border-teal-200 text-teal-700 font-mono font-bold">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-teal-200 text-teal-700 font-mono font-bold">
                                 {preset.badge}
                               </span>
                             </button>
@@ -438,13 +438,45 @@ export const SubmitGrievancePage: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Visible Banner when Sample Scenario is Loaded */}
+                      {loadedPresetName && (
+                        <div className="mb-4 p-3 rounded-xl bg-teal-50/80 border border-teal-200 flex items-center justify-between gap-3 text-xs text-teal-900 shadow-2xs animate-in fade-in duration-150">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-2 py-0.5 rounded bg-teal-200/90 border border-teal-300 text-teal-950 font-bold font-mono text-[10px] uppercase tracking-wider shrink-0">
+                              Demo Scenario Loaded
+                            </span>
+                            <span className="font-semibold truncate">
+                              {loadedPresetName}
+                            </span>
+                            <span className="text-teal-700 text-xs hidden sm:inline">
+                              (Demo Purpose Only)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDescription('');
+                              setLoadedPresetName(null);
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-teal-800 hover:text-teal-950 underline shrink-0 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Clear sample text</span>
+                          </button>
+                        </div>
+                      )}
+
                       <textarea
                         id={descriptionId}
                         name="description"
                         value={description}
                         onChange={(e) => {
-                          setDescription(e.target.value);
-                          if (descriptionHasError && e.target.value.trim().length >= MIN_LENGTH) {
+                          const val = e.target.value;
+                          setDescription(val);
+                          if (!val.trim()) {
+                            setLoadedPresetName(null);
+                          }
+                          if (descriptionHasError && val.trim().length >= MIN_LENGTH) {
                             setValidationErrors((prev) =>
                               prev.filter((err) => !err.toLowerCase().includes('description'))
                             );
@@ -519,25 +551,25 @@ export const SubmitGrievancePage: React.FC = () => {
                             </p>
                           )}
                           {!descriptionHasError && description.trim().length > 0 && (
-                            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                            <span className="text-xs text-slate-600 flex items-center gap-1">
                               {wordCount < 20 ? (
                                 <span className="text-amber-700 font-medium">
                                   Brief narrative &bull; More details help AI routing.
                                 </span>
                               ) : wordCount < 100 ? (
                                 <span className="text-teal-700 font-medium flex items-center gap-1">
-                                  <CheckCircle2 size={12} /> Good level of detail for triage.
+                                  <CheckCircle2 size={13} /> Good level of detail for triage.
                                 </span>
                               ) : (
                                 <span className="text-emerald-700 font-medium flex items-center gap-1">
-                                  <CheckCircle2 size={12} /> Comprehensive narrative for reviewer verification.
+                                  <CheckCircle2 size={13} /> Comprehensive narrative for reviewer verification.
                                 </span>
                               )}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0 tabular-nums font-mono text-[11px]">
+                        <div className="flex items-center gap-2.5 shrink-0 tabular-nums font-mono text-xs">
                           <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                             {wordCount} word{wordCount !== 1 ? 's' : ''}
                           </span>
@@ -549,10 +581,10 @@ export const SubmitGrievancePage: React.FC = () => {
                                 ? 'text-rose-600 font-bold'
                                 : description.length > MAX_LENGTH * 0.9
                                 ? 'text-amber-600 font-semibold'
-                                : 'text-slate-500',
+                                : 'text-slate-600',
                             ].join(' ')}
                           >
-                            {description.length} / {MAX_LENGTH}
+                            {description.length} / {MAX_LENGTH} chars (min {MIN_LENGTH})
                           </span>
                         </div>
                       </div>
@@ -564,7 +596,7 @@ export const SubmitGrievancePage: React.FC = () => {
                         <Info className="w-3.5 h-3.5 text-[#0F766E]" />
                         Helpful intake guidelines:
                       </span>
-                      <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] leading-relaxed">
+                      <ul className="list-disc list-inside space-y-1 pl-1 text-xs leading-relaxed">
                         <li>Identify the financial institution (e.g., bank, servicer, credit bureau).</li>
                         <li>State the exact transaction dates and disputed dollar amounts.</li>
                         <li>Do not enter actual Social Security numbers, debit card PINs, or passwords.</li>
@@ -585,7 +617,7 @@ export const SubmitGrievancePage: React.FC = () => {
                     </p>
                   </div>
 
-                  {/* Submit Button: full width, Trust Teal #0F766E, rounded-lg, no heavy drop shadow */}
+                  {/* Submit Button: full width, Trust Teal #0F766E, rounded-lg */}
                   <div className="pt-2">
                     <Button
                       type="submit"
@@ -593,10 +625,14 @@ export const SubmitGrievancePage: React.FC = () => {
                       size="lg"
                       isLoading={isSubmitting}
                       disabled={isSubmitting}
-                      className="w-full bg-[#0F766E] hover:bg-teal-800 text-white rounded-lg shadow-sm font-bold justify-center py-3"
+                      aria-describedby="submit-guidance"
+                      className="w-full bg-[#0F766E] hover:bg-teal-800 text-white rounded-lg shadow-sm font-bold justify-center py-3 cursor-pointer"
                     >
                       {isSubmitting ? 'Submitting…' : 'Submit Complaint'}
                     </Button>
+                    <p id="submit-guidance" className="text-center text-xs text-slate-500 mt-2.5 leading-relaxed">
+                      Submitting routes your complaint through preliminary automated triage followed by human reviewer verification. Minimum {MIN_LENGTH} characters required.
+                    </p>
                   </div>
                 </form>
               </div>
@@ -611,6 +647,68 @@ export const SubmitGrievancePage: React.FC = () => {
                 />
               </div>
             </div>
+          )}
+
+          {/* ── Collapsible Engine Preview: "See How Automated Triage Works" ── */}
+          {(pageState === 'ready' || pageState === 'submitting') && (
+            <section
+              id="triage-engine-preview"
+              aria-labelledby="triage-engine-heading"
+              className="mt-14 pt-10 border-t border-slate-200 scroll-mt-20"
+            >
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold mb-2 border border-slate-200">
+                      <Sparkles className="w-3.5 h-3.5 text-[#0F766E]" />
+                      <span>Interactive Architecture & Calibrated Output</span>
+                    </div>
+                    <h2
+                      id="triage-engine-heading"
+                      className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight font-sans"
+                    >
+                      See How Automated Triage Works
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                      Explore token-level attribution, calibrated confidence scoring, and safety gating across held-out scenario fixtures before submitting.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsHeroExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 transition-colors shrink-0 shadow-2xs cursor-pointer self-start sm:self-auto"
+                    aria-expanded={isHeroExpanded}
+                    aria-controls="hero-triage-panel"
+                  >
+                    <span>{isHeroExpanded ? 'Collapse Engine Preview' : 'Expand Engine Preview'}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        isHeroExpanded ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {isHeroExpanded && (
+                  <div id="hero-triage-panel" className="mt-6 pt-6 border-t border-slate-100">
+                    <InteractiveTriageHero
+                      onLoadScenario={(presetId) => {
+                        const preset = DEMO_PRESETS.find((p) => p.id === presetId);
+                        if (preset) {
+                          handleLoadPreset(preset.text, preset.label);
+                          const el = document.getElementById(descriptionId);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            el.focus();
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </section>
           )}
         </div>
       </main>

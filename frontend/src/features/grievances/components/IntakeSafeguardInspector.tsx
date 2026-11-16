@@ -155,17 +155,23 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
         </div>
 
         {/* Guidance tiers */}
-        <div className="mt-4 space-y-1.5">
+        <div className="mt-4 space-y-2">
           {[
-            { threshold: 20,  label: '20 words — minimum for AI routing', met: wordCount >= 20 },
-            { threshold: 100, label: '100 words — comprehensive for reviewer', met: wordCount >= 100 },
+            { threshold: 20, label: '20 characters minimum (20+ words recommended for triage)', met: wordCount >= 20 },
+            { threshold: 100, label: '100 words — comprehensive for reviewer verification', met: wordCount >= 100 },
           ].map(({ threshold, label, met }) => (
-            <div key={threshold} className="flex items-center gap-2 text-[11px]">
-              {met
-                ? <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" aria-hidden="true" />
-                : <Circle className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />
-              }
-              <span className={met ? 'text-teal-800 font-semibold' : 'text-slate-500'}>
+            <div key={threshold} className="flex items-center gap-2 text-xs">
+              {met ? (
+                <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
+              ) : (
+                <span
+                  className="w-4 h-4 rounded border border-slate-300 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 font-bold shrink-0"
+                  aria-hidden="true"
+                >
+                  —
+                </span>
+              )}
+              <span className={met ? 'text-teal-800 font-semibold' : 'text-slate-600'}>
                 {label}
               </span>
             </div>
@@ -173,9 +179,9 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
         </div>
 
         {/* Character count */}
-        <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-          <span className="text-slate-500">Character usage</span>
-          <span className={`font-mono font-semibold tabular-nums ${charWarning ? 'text-rose-600' : 'text-slate-600'}`}>
+        <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs">
+          <span className="text-slate-600">Character usage</span>
+          <span className={`font-mono font-semibold tabular-nums ${charWarning ? 'text-rose-600' : 'text-slate-700'}`}>
             {charCount} of {maxLength}
           </span>
         </div>
@@ -203,7 +209,7 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
             Client-Side Privacy Scanner
           </span>
           <span className={[
-            'ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold border',
+            'ml-auto px-2 py-0.5 rounded-full text-xs font-bold border',
             hasPii
               ? 'bg-amber-200 text-amber-900 border-amber-300'
               : 'bg-teal-50 text-teal-700 border-teal-200',
@@ -220,16 +226,15 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
           </p>
         ) : (
           <p className="text-xs text-slate-600 leading-relaxed">
-            No sensitive number patterns detected in your narrative. Scan runs
-            locally — your text is never sent to a third party for privacy analysis.
+            No sensitive number patterns detected (no SSN-, card-, or phone-like numbers found). Names and physical addresses aren't checked.
           </p>
         )}
 
         <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-start gap-1.5">
           <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <p className="text-[10px] text-slate-500 leading-relaxed">
-            Privacy scan is 100% client-side. Checks SSN (XXX-XX-XXXX), 16-digit cards,
-            and phone numbers via regex — no external service is called.
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Privacy scan runs 100% locally via client-side regex for SSN (XXX-XX-XXXX), 16-digit cards,
+            and phone numbers. Names and physical addresses are not checked. No text is sent to third parties.
           </p>
         </div>
       </div>
@@ -272,16 +277,16 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
                 {/* Step content */}
                 <div className="pb-4 pt-0.5 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-xs font-bold ${isActive ? 'text-teal-700' : 'text-slate-500'}`}>
+                    <span className={`text-xs font-bold ${isActive ? 'text-teal-700' : 'text-slate-600'}`}>
                       {stage.title}
                     </span>
                     {isActive && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 text-[9px] font-bold">
+                      <span className="px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-bold">
                         Current
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                  <p className="text-xs text-slate-500 leading-relaxed">
                     {stage.description}
                   </p>
                 </div>
@@ -292,9 +297,9 @@ export const IntakeSafeguardInspector: React.FC<IntakeSafeguardInspectorProps> =
 
         {/* AI disclosure footer */}
         <div className="mt-2 pt-3 border-t border-slate-100">
-          <p className="text-[10px] text-slate-500 leading-relaxed">
+          <p className="text-xs text-slate-500 leading-relaxed">
             <strong className="text-slate-700">AI Disclosure:</strong> Step 2 produces
-            uncalibrated probability estimates and a preliminary routing suggestion —
+            preliminary classification estimates and routing suggestions —
             not a legal determination. All routing is subject to human reviewer
             adjudication before any final decision.
           </p>

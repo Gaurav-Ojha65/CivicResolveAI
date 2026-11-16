@@ -251,16 +251,16 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Global Command Palette"
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-950/70 backdrop-blur-xl animate-in fade-in duration-150"
       onClick={onClose}
       onKeyDown={handleKeyDown}
     >
       <div
-        className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[80vh] text-slate-800"
+        className="w-full max-w-xl bg-slate-900/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 overflow-hidden flex flex-col max-h-[80vh] text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input Bar */}
-        <div className="relative flex items-center px-4 py-3.5 border-b border-slate-100 bg-slate-50/50">
+        <div className="relative flex items-center px-4 py-3.5 border-b border-white/10 bg-white/5">
           <Search size={18} className="text-slate-400 flex-shrink-0 mr-3" />
           <input
             ref={inputRef}
@@ -274,10 +274,10 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
               setQuery(e.target.value);
               setHighlightedIndex(0);
             }}
-            className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 focus:outline-none"
+            className="w-full bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none"
           />
           {isSearching && (
-            <Loader2 size={16} className="text-teal-600 animate-spin ml-2 flex-shrink-0" />
+            <Loader2 size={16} className="text-teal-400 animate-spin ml-2 flex-shrink-0" />
           )}
           {query && !isSearching && (
             <button
@@ -285,7 +285,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                 setQuery('');
                 setSearchResults([]);
               }}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-600"
+              className="p-1 rounded-md text-slate-400 hover:text-white"
               title="Clear search"
             >
               <X size={14} />
@@ -295,14 +295,14 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
         {/* Inline Confirmation Prompt for Seeding */}
         {confirmSeedOpen && (
-          <div className="p-4 bg-amber-50 border-b border-amber-200 flex flex-col gap-2.5 animate-in slide-in-from-top-2">
+          <div className="p-4 bg-amber-950/60 border-b border-amber-500/30 flex flex-col gap-2.5 animate-in slide-in-from-top-2 text-amber-200">
             <div className="flex items-start gap-2.5">
-              <AlertCircle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-xs font-bold text-amber-900">
+                <p className="text-xs font-bold text-amber-300">
                   Confirm Synthetic Telemetry Seeding
                 </p>
-                <p className="text-[11px] text-amber-800 mt-0.5">
+                <p className="text-[11px] text-amber-200/80 mt-0.5">
                   This action will persist 32 realistic synthetic CFPB complaints with SLA distributions. The operation is idempotent.
                 </p>
               </div>
@@ -312,7 +312,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                 type="button"
                 onClick={() => setConfirmSeedOpen(false)}
                 disabled={isSeeding}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-white/80 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:bg-white/10 transition-colors"
               >
                 Cancel
               </button>
@@ -320,7 +320,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                 type="button"
                 onClick={handleSeedExecution}
                 disabled={isSeeding}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-xs transition-colors flex items-center gap-1.5"
               >
                 {isSeeding ? <Loader2 size={12} className="animate-spin" /> : null}
                 <span>{isSeeding ? 'Seeding...' : 'Confirm & Seed'}</span>
@@ -331,8 +331,8 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
         {/* Notice Banner */}
         {seedNotice && (
-          <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
-            <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" />
+          <div className="px-4 py-2 bg-emerald-950/60 border-b border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
             <span>{seedNotice}</span>
           </div>
         )}
@@ -363,16 +363,16 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                           onMouseEnter={() => setHighlightedIndex(idx)}
                           className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition-colors ${
                             isSelected
-                              ? 'bg-teal-50 text-teal-950 font-medium'
-                              : 'text-slate-700 hover:bg-slate-50'
+                              ? 'bg-teal-500/20 text-white font-medium border border-teal-500/30'
+                              : 'text-slate-300 hover:bg-white/5 border border-transparent'
                           }`}
                         >
                           <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-7 h-7 rounded-lg bg-teal-100/60 flex items-center justify-center flex-shrink-0">
+                            <div className="w-7 h-7 rounded-lg bg-teal-500/20 flex items-center justify-center flex-shrink-0 text-teal-300">
                               {action.icon}
                             </div>
                             <div className="overflow-hidden">
-                              <p className="font-semibold text-slate-900 truncate">
+                              <p className="font-semibold text-white truncate">
                                 {action.title}
                               </p>
                               <p className="text-[11px] text-slate-400 font-mono truncate">
@@ -382,11 +382,11 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                           </div>
                           <div className="flex items-center gap-2">
                             {action.badge && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-slate-100 text-slate-600">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-white/10 text-slate-300 border border-white/10">
                                 {action.badge}
                               </span>
                             )}
-                            <ArrowRight size={14} className="text-slate-300" />
+                            <ArrowRight size={14} className="text-slate-500" />
                           </div>
                         </div>
                       );
@@ -414,24 +414,24 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                           onMouseEnter={() => setHighlightedIndex(overallIndex)}
                           className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition-colors ${
                             isSelected
-                              ? 'bg-teal-50 text-teal-950 font-medium'
-                              : 'text-slate-700 hover:bg-slate-50'
+                              ? 'bg-teal-500/20 text-white font-medium border border-teal-500/30'
+                              : 'text-slate-300 hover:bg-white/5 border border-transparent'
                           }`}
                         >
                           <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                            <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 text-teal-300">
                               {action.icon}
                             </div>
                             <div className="overflow-hidden">
-                              <p className="font-semibold text-slate-900 truncate">
+                              <p className="font-semibold text-white truncate">
                                 {action.title}
                               </p>
-                              <p className="text-[11px] text-slate-500 truncate">
+                              <p className="text-[11px] text-slate-400 truncate">
                                 {action.subtitle}
                               </p>
                             </div>
                           </div>
-                          <ArrowRight size={14} className="text-slate-300" />
+                          <ArrowRight size={14} className="text-slate-500" />
                         </div>
                       );
                     })}
@@ -459,21 +459,21 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                           onMouseEnter={() => !action.disabled && setHighlightedIndex(overallIndex)}
                           className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors ${
                             action.disabled
-                              ? 'opacity-60 cursor-not-allowed text-slate-400 bg-slate-50/50'
+                              ? 'opacity-50 cursor-not-allowed text-slate-500 bg-white/5 border border-transparent'
                               : isSelected
-                              ? 'bg-teal-50 text-teal-950 font-medium cursor-pointer'
-                              : 'text-slate-700 hover:bg-slate-50 cursor-pointer'
+                              ? 'bg-teal-500/20 text-white font-medium cursor-pointer border border-teal-500/30'
+                              : 'text-slate-300 hover:bg-white/5 cursor-pointer border border-transparent'
                           }`}
                         >
                           <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                            <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0 text-amber-300">
                               {action.icon}
                             </div>
                             <div className="overflow-hidden">
-                              <p className="font-semibold text-slate-900 truncate">
+                              <p className="font-semibold text-white truncate">
                                 {action.title}
                               </p>
-                              <p className="text-[11px] text-slate-500 truncate">
+                              <p className="text-[11px] text-slate-400 truncate">
                                 {action.subtitle}
                               </p>
                             </div>
@@ -482,8 +482,8 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ${
                                 action.disabled
-                                  ? 'bg-slate-100 text-slate-500'
-                                  : 'bg-amber-100 text-amber-800'
+                                  ? 'bg-white/10 text-slate-400 border border-white/10'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                               }`}
                             >
                               {action.badge}
@@ -500,25 +500,25 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         </div>
 
         {/* Footer with keyboard hints */}
-        <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
+        <div className="px-4 py-2.5 border-t border-white/10 bg-black/30 flex items-center justify-between text-[11px] text-slate-400">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono text-[10px] shadow-2xs">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 font-mono text-[10px] text-slate-300 shadow-2xs">
                 ↑
               </kbd>
-              <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono text-[10px] shadow-2xs">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 font-mono text-[10px] text-slate-300 shadow-2xs">
                 ↓
               </kbd>
               navigate
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono text-[10px] shadow-2xs">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 font-mono text-[10px] text-slate-300 shadow-2xs">
                 <CornerDownLeft size={10} className="inline" />
               </kbd>
               select
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono text-[10px] shadow-2xs">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 font-mono text-[10px] text-slate-300 shadow-2xs">
                 esc
               </kbd>
               close
