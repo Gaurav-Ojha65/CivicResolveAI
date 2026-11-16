@@ -146,25 +146,25 @@ export const LandingPage: React.FC = () => {
           <div className="hidden md:flex items-center gap-8">
             <a
               href="#how-it-works"
-              className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-ink-deep transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-ink transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
             >
               How It Works
             </a>
             <a
               href="#transparency"
-              className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-ink-deep transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-ink transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
             >
               About
             </a>
             <Link
               to="/track"
-              className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-teal-trust transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
             >
               Track Complaint
             </Link>
             <Link
               to="/reviewer/login"
-              className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-teal-trust transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
             >
               Reviewer Portal
             </Link>
@@ -299,58 +299,58 @@ export const LandingPage: React.FC = () => {
                 </div>
 
                 {/* Micro Trust Proofs */}
-                <div className="pt-4 grid grid-cols-3 gap-4 border-t border-border/80">
+                <div className="pt-4 grid grid-cols-3 gap-4 border-t border-line">
                   <div>
-                    <span className="block text-xl sm:text-2xl font-extrabold text-ink-deep font-mono">
+                    <span className="block text-xl sm:text-2xl font-extrabold text-ink font-mono">
                       8
                     </span>
-                    <span className="text-[11px] font-medium text-ink-muted">
+                    <span className="text-xs font-medium text-slate-600">
                       CFPB Taxonomies
                     </span>
                   </div>
                   <div>
-                    <span className="block text-xl sm:text-2xl font-extrabold text-teal-trust font-mono">
+                    <span className="block text-xl sm:text-2xl font-extrabold text-brand-700 font-mono">
                       100%
                     </span>
-                    <span className="text-[11px] font-medium text-ink-muted">
-                      Human in the Loop
+                    <span className="text-xs font-medium text-slate-600">
+                      Human review on every adjudication
                     </span>
                   </div>
                   <div>
-                    <span className="block text-xl sm:text-2xl font-extrabold text-ink-deep font-mono">
+                    <span className="block text-xl sm:text-2xl font-extrabold text-ink font-mono">
                       SHA-256
                     </span>
-                    <span className="text-[11px] font-medium text-ink-muted">
+                    <span className="text-xs font-medium text-slate-600">
                       Model Provenance
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Right Column: Live Interactive Triage Simulation */}
+              {/* Right Column: Clean White Enterprise Preview Card */}
               <div className="lg:col-span-6">
-                <div className="rounded-2xl border border-border bg-surface shadow-card-hover overflow-hidden">
-                  {/* Terminal Header */}
-                  <div className="px-5 py-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-slate-300">
+                <div className="rounded-[10px] border border-line bg-white shadow-card overflow-hidden">
+                  {/* Clean Header */}
+                  <div className="px-5 py-3.5 bg-white border-b border-line flex items-center justify-between text-ink">
                     <div className="flex items-center gap-2">
                       <div className="flex gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-200" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
                       </div>
-                      <span className="text-xs font-mono font-medium text-slate-400 ml-2">
+                      <span className="text-xs font-mono font-medium text-slate-600 ml-2">
                         nlp-triage-pipeline: live preview
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-teal-400 border border-slate-700">
-                      <Sparkles className="w-3 h-3" />
+                    <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold">
+                      <Sparkles className="w-3 h-3 text-teal-700" />
                       LINEAR XAI
                     </div>
                   </div>
 
                   {/* Interactive Scenario Tabs */}
-                  <div className="px-5 pt-4 pb-2 bg-canvas/70 border-b border-border flex items-center gap-2 overflow-x-auto">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted shrink-0 mr-1">
+                  <div className="px-5 pt-3 pb-2 bg-slate-50 border-b border-line flex items-center gap-2 overflow-x-auto">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 shrink-0 mr-1">
                       Sample Case:
                     </span>
                     {DEMO_SCENARIOS.map((scenario) => (
@@ -360,8 +360,8 @@ export const LandingPage: React.FC = () => {
                         onClick={() => setActiveScenarioId(scenario.id)}
                         className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer ${
                           activeScenarioId === scenario.id
-                            ? 'bg-surface text-ink-deep border border-border shadow-xs'
-                            : 'text-ink-muted hover:text-ink-deep hover:bg-surface/60'
+                            ? 'bg-white text-ink border border-line shadow-2xs font-bold'
+                            : 'text-slate-600 hover:text-ink hover:bg-white/60'
                         }`}
                       >
                         {scenario.tabLabel}
@@ -373,14 +373,14 @@ export const LandingPage: React.FC = () => {
                   <div className="p-5 space-y-4">
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
                           Citizen Grievance Narrative:
                         </span>
-                        <span className="text-[10px] font-mono text-ink-muted">
+                        <span className="text-xs font-mono text-slate-500">
                           token highlights active
                         </span>
                       </div>
-                      <div className="p-3.5 rounded-xl bg-canvas border border-border text-xs leading-relaxed text-ink-deep font-sans">
+                      <div className="p-3.5 rounded-[10px] bg-slate-50 border border-line text-xs leading-relaxed text-ink font-sans">
                         {activeScenario.description.split(' ').map((word, idx) => {
                           const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
                           const isHighlighted = activeScenario.highlightedWords.includes(cleanWord);
@@ -389,7 +389,7 @@ export const LandingPage: React.FC = () => {
                               key={idx}
                               className={
                                 isHighlighted
-                                  ? 'bg-teal-trust/20 text-teal-900 font-bold px-1 py-0.5 rounded border border-teal-trust/30 mx-0.5'
+                                  ? 'bg-teal-50 text-teal-900 font-bold px-1 py-0.5 rounded border border-teal-200 mx-0.5'
                                   : 'mx-0.5'
                               }
                             >
@@ -401,45 +401,45 @@ export const LandingPage: React.FC = () => {
                     </div>
 
                     {/* Output Triage Classification Panel */}
-                    <div className="p-4 rounded-xl bg-surface border border-slate-200/90 shadow-xs space-y-3">
-                      <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="p-4 rounded-[10px] bg-white border border-line shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-line pb-3">
                         <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                             Predicted CFPB Category
                           </span>
-                          <span className="text-sm font-extrabold text-ink-deep font-sans">
+                          <span className="text-sm font-extrabold text-ink font-sans">
                             {activeScenario.category}
                           </span>
                         </div>
                         <div className="text-right">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                             Confidence
                           </span>
-                          <span className="text-base font-extrabold text-teal-trust font-mono">
+                          <span className="text-base font-extrabold text-brand-700 font-mono tabular-nums">
                             {activeScenario.confidence}%
                           </span>
                         </div>
                       </div>
 
-                      {/* Linear Feature Attribution Bar */}
+                      {/* Linear Feature Attribution Tokens (Wrapped, not clipped) */}
                       <div>
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-ink-muted mb-1.5">
+                        <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1.5">
                           <span className="flex items-center gap-1">
-                            <Scale className="w-3 h-3 text-teal-trust" />
+                            <Scale className="w-3.5 h-3.5 text-brand-600" />
                             Top Positive Feature Attributions:
                           </span>
-                          <span className="font-mono text-[10px]">Decision Margin: {activeScenario.margin}%</span>
+                          <span className="font-mono text-xs text-slate-500 tabular-nums">Decision Margin: {activeScenario.margin}%</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {activeScenario.features.map((feat) => (
                             <div
                               key={feat.feature}
-                              className="p-2 rounded-lg bg-canvas border border-border flex items-center justify-between text-[11px] font-mono"
+                              className="p-2 rounded-lg bg-slate-50 border border-line flex items-center justify-between text-xs font-mono"
                             >
-                              <span className="font-semibold text-ink-deep truncate pr-1">
+                              <span className="font-semibold text-ink truncate pr-1">
                                 {feat.feature}
                               </span>
-                              <span className="text-semantic-success-fg font-bold shrink-0">
+                              <span className="text-emerald-700 font-bold shrink-0 tabular-nums">
                                 +{feat.contribution.toFixed(3)}
                               </span>
                             </div>
@@ -448,10 +448,10 @@ export const LandingPage: React.FC = () => {
                       </div>
 
                       {/* Human Routing Notice */}
-                      <div className="pt-1 flex items-start gap-2 text-xs text-ink-muted bg-teal-trust/5 p-2.5 rounded-lg border border-teal-trust/15">
-                        <Users className="w-4 h-4 text-teal-trust shrink-0 mt-0.5" />
+                      <div className="pt-1 flex items-start gap-2 text-xs text-slate-700 bg-teal-50/60 p-2.5 rounded-lg border border-teal-200">
+                        <Users className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
                         <div>
-                          <span className="font-bold text-ink-deep">Triage Recommendation:</span>{' '}
+                          <span className="font-bold text-ink">Triage Recommendation:</span>{' '}
                           {activeScenario.routeReason}.
                         </div>
                       </div>
@@ -818,7 +818,7 @@ export const LandingPage: React.FC = () => {
 
             {/* Navigation links */}
             <nav aria-label="Footer navigation">
-              <ul className="flex flex-wrap gap-6 sm:gap-8 text-xs font-semibold uppercase tracking-wider text-slate-300" role="list">
+              <ul className="flex flex-wrap gap-6 sm:gap-8 text-sm font-medium text-slate-300" role="list">
                 <li>
                   <Link
                     to="/"
