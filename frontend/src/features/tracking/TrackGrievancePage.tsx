@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, type Variants } from 'framer-motion';
 import {
   Search,
   Eye,
@@ -12,7 +13,9 @@ import {
   HelpCircle,
   FileText,
   RotateCcw,
-  ShieldCheck,
+  Lock,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { trackGrievance } from '../../lib/api/endpoints';
 import { ApiError } from '../../lib/errors/api-error';
@@ -33,6 +36,60 @@ const SECRET_REGEX = /^trk_[A-Za-z0-9_-]{43}$/;
 type TrackingState = 'idle' | 'loading' | 'success' | 'error';
 
 /**
+ * Stage definitions for the 4-step consumer progress stepper.
+ */
+interface StepperStep {
+  id: string;
+  label: string;
+  description: string;
+}
+
+const STEPS: StepperStep[] = [
+  { id: 'received', label: 'Received', description: 'Intake recorded' },
+  { id: 'triaged', label: 'Auto-Triaged', description: 'AI classification' },
+  { id: 'review', label: 'Specialist review (if needed)', description: 'Human evaluation' },
+  { id: 'resolved', label: 'Resolved', description: 'Final determination' },
+];
+
+/**
+ * Maps the backend grievance status to the active progress step (0-3)
+ * via an exhaustive switch over GrievanceStatus.
+ */
+function getActiveStepIndex(status: GrievanceStatus): number {
+  switch (status) {
+    case 'PENDING_REVIEW':
+      return 1; // Stage 2 of 4: Auto-Triaged (awaiting human specialist)
+    case 'AUTO_ROUTED':
+      return 1; // Stage 2 of 4: Auto-Triaged (automated routing complete)
+    case 'UNDER_REVIEW':
+      return 2; // Stage 3 of 4: Specialist review (if needed)
+    case 'APPROVED':
+    case 'OVERRIDDEN':
+    case 'REJECTED':
+    case 'DISMISSED':
+      return 3; // Stage 4 of 4: Resolved / Closed
+    default: {
+      const _exhaustiveCheck: never = status;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+/**
+ * Returns the contextual label for the step based on grievance status.
+ * For DISMISSED or REJECTED cases, renders "Closed" rather than "Resolved".
+ */
+function getStepLabel(stepIndex: number, status?: GrievanceStatus): string {
+  if (stepIndex === 3) {
+    if (status === 'DISMISSED' || status === 'REJECTED') {
+      return 'Closed';
+    }
+    return 'Resolved';
+  }
+  return STEPS[stepIndex]?.label ?? 'Received';
+}
+
+/**
  * Stage badge styling and icon mapping for sanitized consumer timeline events.
  */
 function getStageMetadata(stage: string, _status?: GrievanceStatus) {
@@ -40,47 +97,73 @@ function getStageMetadata(stage: string, _status?: GrievanceStatus) {
     case 'SUBMITTED':
       return {
         icon: FileText,
-        colorClass: 'text-ink-muted bg-canvas border-border',
+        colorClass: 'text-slate-700 bg-slate-100 border-slate-300',
         badgeVariant: 'default' as const,
         label: 'Intake Received',
       };
     case 'AUTOMATED_TRIAGE':
       return {
         icon: CheckCircle2,
-        colorClass: 'text-teal-trust bg-teal-trust/10 border-teal-trust/30',
+        colorClass: 'text-teal-700 bg-teal-50 border-teal-300',
         badgeVariant: 'success' as const,
         label: 'Automated Routing',
       };
     case 'REVIEW_APPROVED':
       return {
         icon: CheckCircle2,
-        colorClass: 'text-semantic-success-fg bg-semantic-success-bg border-semantic-success-border',
+        colorClass: 'text-emerald-700 bg-emerald-50 border-emerald-300',
         badgeVariant: 'success' as const,
         label: 'Review Approved',
       };
     case 'REVIEW_OVERRIDDEN':
       return {
         icon: Layers,
-        colorClass: 'text-semantic-info-fg bg-semantic-info-bg border-semantic-info-border',
+        colorClass: 'text-sky-700 bg-sky-50 border-sky-300',
         badgeVariant: 'info' as const,
         label: 'Classification Adjusted',
       };
     case 'REVIEW_REJECTED':
       return {
         icon: AlertCircle,
-        colorClass: 'text-semantic-danger-fg bg-semantic-danger-bg border-semantic-danger-border',
+        colorClass: 'text-rose-700 bg-rose-50 border-rose-300',
         badgeVariant: 'danger' as const,
         label: 'Intake Rejected',
       };
     default:
       return {
         icon: Clock,
-        colorClass: 'text-ink-muted bg-canvas border-border',
+        colorClass: 'text-slate-700 bg-slate-100 border-slate-300',
         badgeVariant: 'default' as const,
         label: 'Status Update',
       };
   }
 }
+
+/**
+ * Framer Motion physics for chronological timeline staggered cascading.
+ */
+const listVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 300,
+      damping: 30,
+    },
+  },
+};
 
 /**
  * TrackGrievancePage — Public complaint status and timeline tracking.
@@ -99,6 +182,7 @@ export const TrackGrievancePage: React.FC = () => {
   const [trackingData, setTrackingData] = useState<GrievanceTrackingResponse | null>(null);
   const [clientErrors, setClientErrors] = useState<{ referenceId?: string; trackingSecret?: string }>({});
   const [serverError, setServerError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
@@ -147,7 +231,6 @@ export const TrackGrievancePage: React.FC = () => {
       abortRef.current.abort();
     }
     abortRef.current = new AbortController();
-
     setState('loading');
 
     try {
@@ -185,7 +268,19 @@ export const TrackGrievancePage: React.FC = () => {
     setReferenceId('');
     setClientErrors({});
     setServerError(null);
+    setCopied(false);
     setState('idle');
+  };
+
+  const handleCopyId = async () => {
+    if (!trackingData?.referenceId) return;
+    try {
+      await navigator.clipboard.writeText(trackingData.referenceId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy reference ID:', err);
+    }
   };
 
   const formatDate = (iso: string): string => {
@@ -203,14 +298,18 @@ export const TrackGrievancePage: React.FC = () => {
     }
   };
 
+  const activeStepIndex = trackingData
+    ? getActiveStepIndex(trackingData.status)
+    : 0;
+
   return (
-    <>
-      <main id="main-content" className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+    <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900">
+      <main id="main-content" className="flex-1 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 md:py-12 w-full">
         {/* Navigation back */}
         <div className="mb-6">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-teal-trust transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded px-2 py-1 bg-surface border border-border"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600 hover:text-teal-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded px-2.5 py-1 bg-white border border-slate-200 shadow-2xs"
           >
             <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
             Return to home
@@ -219,21 +318,21 @@ export const TrackGrievancePage: React.FC = () => {
 
         {/* Page Header */}
         <div className="mb-8">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-trust/10 text-teal-trust text-xs font-semibold mb-3 border border-teal-trust/20">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Encrypted Case Status Retrieval</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-teal-800 text-xs font-semibold mb-3 border border-teal-200 shadow-2xs">
+            <Lock className="w-3.5 h-3.5 text-teal-700" aria-hidden="true" />
+            <span>Secure Case Lookup</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-ink-deep tracking-tight font-sans">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight font-sans">
             Track Complaint Status
           </h1>
-          <p className="mt-2 text-sm sm:text-base text-ink-muted leading-relaxed">
+          <p className="mt-2 text-sm sm:text-base text-slate-600 leading-relaxed">
             Enter the Reference ID and one-time Tracking Secret provided when you submitted your complaint.
           </p>
         </div>
 
         {/* ── Tracking Search Form ────────────────────────────────────────────── */}
         {state !== 'success' && (
-          <div className="rounded-2xl border border-border bg-surface p-6 sm:p-8 shadow-card">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
             <form onSubmit={handleTrack} noValidate aria-label="Complaint tracking search form">
               {/* Server error alert */}
               {serverError && (
@@ -262,12 +361,12 @@ export const TrackGrievancePage: React.FC = () => {
                 {/* Reference ID Input */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <Label htmlFor="referenceId" required className="text-sm font-bold text-ink-deep">
+                    <Label htmlFor="referenceId" required className="text-sm font-bold text-slate-900">
                       Reference ID (UUID)
                     </Label>
-                    <span className="text-[11px] font-mono text-ink-muted">Format: 36 chars</span>
+                    <span className="text-[11px] font-mono text-slate-500">Format: 36 chars</span>
                   </div>
-                  <p id="referenceId-hint" className="text-xs text-ink-muted mb-2">
+                  <p id="referenceId-hint" className="text-xs text-slate-600 mb-2">
                     The 36-character identifier assigned on your submission receipt.
                   </p>
                   <Input
@@ -294,12 +393,12 @@ export const TrackGrievancePage: React.FC = () => {
                 {/* Tracking Secret Input */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <Label htmlFor="trackingSecret" required className="text-sm font-bold text-ink-deep">
+                    <Label htmlFor="trackingSecret" required className="text-sm font-bold text-slate-900">
                       One-Time Tracking Secret
                     </Label>
-                    <span className="text-[11px] font-mono text-ink-muted">Format: trk_... (47 chars)</span>
+                    <span className="text-[11px] font-mono text-slate-500">Format: trk_... (47 chars)</span>
                   </div>
-                  <p id="trackingSecret-hint" className="text-xs text-ink-muted mb-2">
+                  <p id="trackingSecret-hint" className="text-xs text-slate-600 mb-2">
                     The 47-character secret shown exclusively on your initial submission receipt.
                   </p>
                   <div className="relative">
@@ -325,7 +424,7 @@ export const TrackGrievancePage: React.FC = () => {
                       type="button"
                       onClick={() => setShowSecret((s) => !s)}
                       aria-label={showSecret ? 'Hide tracking secret' : 'Show tracking secret'}
-                      className="absolute right-3 top-2.5 text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded p-1.5 transition-colors"
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded p-1.5 transition-colors"
                     >
                       {showSecret ? (
                         <EyeOff className="w-4 h-4" aria-hidden="true" />
@@ -338,10 +437,10 @@ export const TrackGrievancePage: React.FC = () => {
               </div>
 
               {/* Security info box */}
-              <div className="mt-6 p-4 rounded-xl bg-canvas border border-border flex items-start gap-3">
-                <HelpCircle className="w-5 h-5 text-teal-trust shrink-0 mt-0.5" aria-hidden="true" />
-                <p className="text-xs text-ink-muted leading-relaxed">
-                  <strong className="text-ink font-semibold">Privacy Protected:</strong> Your tracking credentials
+              <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+                <HelpCircle className="w-5 h-5 text-teal-700 shrink-0 mt-0.5" aria-hidden="true" />
+                <p className="text-xs text-slate-700 leading-relaxed">
+                  <strong className="text-slate-900 font-semibold">Privacy Protected:</strong> Your tracking credentials
                   are transmitted over encrypted HTTPS directly to the backend. The tracking timeline exposes only
                   customer-safe status updates, never disclosing personal details, reviewer notes, or internal staff accounts.
                 </p>
@@ -369,120 +468,260 @@ export const TrackGrievancePage: React.FC = () => {
         {state === 'success' && trackingData && (
           <div className="space-y-6">
             {/* Header Card */}
-            <div className="rounded-2xl border border-border bg-surface p-6 sm:p-7 shadow-card">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-border">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-trust block">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
+                <div className="max-w-full overflow-hidden">
+                  <span className="text-xs font-bold uppercase tracking-wider text-teal-800 block">
                     Complaint Status Record
                   </span>
-                  <h2 className="text-lg sm:text-xl font-bold text-ink-deep font-mono break-all mt-1">
-                    {trackingData.referenceId}
-                  </h2>
+                  <div className="flex items-center gap-2 mt-1 max-w-full">
+                    <h2
+                      title={trackingData.referenceId}
+                      className="text-base sm:text-xl font-bold text-slate-900 font-mono truncate break-all"
+                    >
+                      {trackingData.referenceId}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={handleCopyId}
+                      title={copied ? 'Reference ID copied!' : 'Copy Reference ID'}
+                      aria-label={copied ? 'Reference ID copied to clipboard' : 'Copy Reference ID to clipboard'}
+                      className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs transition-all shrink-0 focus-visible:outline-teal-600"
+                    >
+                      {copied ? (
+                        <Check className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-slate-500" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <StatusIndicator status={trackingData.status} />
                 </div>
               </div>
 
-              {/* Details grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-5">
-                <div className="p-3.5 rounded-xl bg-canvas border border-border/80">
-                  <dt className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+              {/* Details grid - responsive 1-col on mobile, 3-col on desktop */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-5">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-slate-700">
                     Assigned Product
                   </dt>
-                  <dd className="text-sm font-bold text-ink-deep mt-1 font-sans">
+                  <dd className="text-sm font-bold text-slate-900 mt-1 font-sans">
                     {trackingData.assignedCategory}
                   </dd>
                 </div>
-                <div className="p-3.5 rounded-xl bg-canvas border border-border/80">
-                  <dt className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-slate-700">
                     Triage Priority
                   </dt>
                   <dd className="mt-1">
                     <StatusIndicator priority={trackingData.priority} />
                   </dd>
                 </div>
-                <div className="p-3.5 rounded-xl bg-canvas border border-border/80">
-                  <dt className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-slate-700">
                     Submitted Date
                   </dt>
-                  <dd className="text-xs sm:text-sm font-medium text-ink-deep mt-1 tabular-nums">
+                  <dd className="text-sm font-semibold text-slate-900 mt-1 tabular-nums font-mono">
                     <time dateTime={trackingData.submittedAt}>{formatDate(trackingData.submittedAt)}</time>
                   </dd>
                 </div>
               </div>
             </div>
 
-            {/* Timeline Card */}
-            <div className="rounded-2xl border border-border bg-surface p-6 sm:p-8 shadow-card">
-              <div className="flex items-center justify-between pb-6 border-b border-border">
+            {/* ── Progress Stepper Card ────────────────────────────────────────── */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-teal-600" aria-hidden="true" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Resolution Progress
+                  </h3>
+                </div>
+                <span className="text-xs font-mono font-semibold text-teal-800 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
+                  Stage {Math.min(activeStepIndex + 1, 4)} of 4: {getStepLabel(activeStepIndex, trackingData.status)}
+                </span>
+              </div>
+
+              <ol aria-label="Complaint Progress Stepper" className="flex flex-col sm:flex-row sm:items-center w-full">
+                {STEPS.map((step, idx) => {
+                  const isCompleted = idx < activeStepIndex;
+                  const isCurrent = idx === activeStepIndex;
+                  const isLast = idx === STEPS.length - 1;
+                  const isDismissed = trackingData.status === 'DISMISSED';
+                  const stepLabel = idx === 3 && (isDismissed || trackingData.status === 'REJECTED') ? 'Closed' : step.label;
+
+                  return (
+                    <li
+                      key={step.id}
+                      className={`relative flex sm:flex-col sm:items-center flex-1 ${
+                        !isLast ? 'pb-6 sm:pb-0' : ''
+                      }`}
+                    >
+                      {/* Connector Line */}
+                      {!isLast && (
+                        <>
+                          {/* Vertical connector on mobile */}
+                          <div
+                            className={`sm:hidden absolute left-4 top-8 -bottom-1 w-0.5 ${
+                              isCompleted ? 'bg-teal-600' : 'bg-slate-200'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {/* Horizontal connector on desktop */}
+                          <div
+                            className={`hidden sm:block absolute top-4 left-1/2 w-full h-0.5 -z-0 ${
+                              isCompleted ? 'bg-teal-600' : 'bg-slate-200'
+                            }`}
+                            aria-hidden="true"
+                          />
+                        </>
+                      )}
+
+                      {/* Step Circle & Label Node */}
+                      <div className="flex sm:flex-col items-center gap-3 sm:gap-2 z-10 w-full sm:text-center">
+                        <div
+                          className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold shrink-0 transition-all ${
+                            isCompleted
+                              ? 'bg-teal-600 text-white shadow-xs'
+                              : isCurrent
+                              ? isDismissed
+                                ? 'bg-slate-100 text-slate-800 border-2 border-slate-500 ring-4 ring-slate-400/20 shadow-xs'
+                                : 'bg-teal-50 text-teal-700 border-2 border-teal-600 ring-4 ring-teal-500/15 shadow-xs'
+                              : 'bg-slate-100 text-slate-500 border border-slate-300'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <Check className="w-4 h-4 stroke-[2.5]" aria-hidden="true" />
+                          ) : (
+                            <span>{idx + 1}</span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col sm:items-center">
+                          <span
+                            className={`text-xs font-bold ${
+                              isCurrent
+                                ? isDismissed
+                                  ? 'text-slate-900 font-extrabold'
+                                  : 'text-teal-900 font-extrabold'
+                                : isCompleted
+                                ? 'text-slate-900'
+                                : 'text-slate-500'
+                            }`}
+                          >
+                            {stepLabel}
+                          </span>
+                          <span
+                            className={`text-[11px] font-mono ${
+                              isCurrent
+                                ? isDismissed
+                                  ? 'text-slate-600 font-bold'
+                                  : 'text-teal-700 font-bold'
+                                : isCompleted
+                                ? 'text-slate-500'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {isDismissed && idx === 3
+                              ? 'Closed'
+                              : isCompleted
+                              ? 'Complete'
+                              : isCurrent
+                              ? 'In Progress'
+                              : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+
+            {/* ── Chronological Timeline Card ─────────────────────────────────── */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+              <div className="flex items-center justify-between pb-6 border-b border-slate-100">
                 <div>
-                  <h3 className="text-lg font-bold text-ink-deep font-sans">
+                  <h3 className="text-lg font-bold text-slate-900 font-sans">
                     Progress Timeline
                   </h3>
-                  <p className="text-xs text-ink-muted mt-0.5">
+                  <p className="text-xs text-slate-600 mt-0.5">
                     Chronological events recorded in the append-only audit trail.
                   </p>
                 </div>
-                <Badge variant="default" className="font-mono">
+                <Badge variant="default" className="font-mono text-xs">
                   {trackingData.timeline.length} {trackingData.timeline.length === 1 ? 'Event' : 'Events'}
                 </Badge>
               </div>
 
-              {/* Timeline Items */}
+              {/* Timeline List */}
               <div className="mt-6 flow-root">
                 {trackingData.timeline.length === 0 ? (
-                  <p className="text-sm text-ink-muted py-6 text-center">
+                  <p className="text-sm text-slate-500 py-6 text-center">
                     No progress events recorded yet.
                   </p>
                 ) : (
-                  <ol className="relative border-l-2 border-slate-200 ml-3.5 space-y-8 py-2">
+                  <motion.ol
+                    variants={listVariants}
+                    initial="hidden"
+                    animate="show"
+                    className="relative border-l-2 border-slate-200 ml-3.5 space-y-8 py-2"
+                  >
                     {trackingData.timeline.map((event: ConsumerTimelineEvent, index: number) => {
                       const meta = getStageMetadata(event.stage, event.status);
                       const IconComponent = meta.icon;
                       const isLatest = index === trackingData.timeline.length - 1;
 
                       return (
-                        <li key={`${event.stage}-${event.timestamp}-${index}`} className="ml-7">
+                        <motion.li
+                          key={`${event.stage}-${event.timestamp}-${index}`}
+                          variants={itemVariants}
+                          className="ml-7 relative"
+                        >
                           {/* Dot / Icon */}
                           <span
-                            className={`absolute -left-3.5 flex h-7 w-7 items-center justify-center rounded-full border-2 ${meta.colorClass} shadow-xs`}
+                            className={`absolute -left-[42px] top-4.5 flex h-7 w-7 items-center justify-center rounded-full border-2 ${meta.colorClass} shadow-xs bg-white`}
                             aria-hidden="true"
                           >
                             <IconComponent className="h-3.5 w-3.5" />
                           </span>
 
                           {/* Event content box */}
-                          <div className="rounded-xl border border-border bg-canvas/70 p-4 sm:p-5 shadow-xs hover:border-slate-300 transition-colors">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 shadow-xs hover:border-slate-300 transition-colors">
+                            {/* Top row: Left (Badge + Title) | Right (Current Badge + Timestamp) */}
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 pb-2 border-b border-slate-200/60">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Badge variant={meta.badgeVariant}>
                                   {meta.label}
                                 </Badge>
                                 {event.title && (
-                                  <h4 className="text-sm font-bold text-ink-deep font-sans">
+                                  <h4 className="text-sm font-bold text-slate-900 font-sans">
                                     {event.title}
                                   </h4>
                                 )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 sm:self-center">
                                 {isLatest && (
                                   <Badge variant="info">Current</Badge>
                                 )}
+                                <time
+                                  dateTime={event.timestamp}
+                                  className="text-xs text-slate-600 tabular-nums font-mono"
+                                >
+                                  {formatDate(event.timestamp)}
+                                </time>
                               </div>
-                              <time
-                                dateTime={event.timestamp}
-                                className="text-xs text-ink-muted tabular-nums font-mono"
-                              >
-                                {formatDate(event.timestamp)}
-                              </time>
                             </div>
-                            <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">
+                            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
                               {event.description}
                             </p>
                           </div>
-                        </li>
+                        </motion.li>
                       );
                     })}
-                  </ol>
+                  </motion.ol>
                 )}
               </div>
             </div>
@@ -495,12 +734,12 @@ export const TrackGrievancePage: React.FC = () => {
                 size="sm"
                 onClick={handleReset}
                 leftIcon={<RotateCcw className="w-4 h-4" aria-hidden="true" />}
-                className="font-semibold border-border hover:bg-slate-50"
+                className="font-semibold border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs"
               >
                 Track Another Complaint
               </Button>
               <Link to="/">
-                <Button variant="ghost" size="sm" className="text-ink-muted hover:text-ink-deep">
+                <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900">
                   Return to Home
                 </Button>
               </Link>
@@ -510,12 +749,12 @@ export const TrackGrievancePage: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border mt-16 py-8 text-center print:hidden bg-surface">
-        <p className="text-xs text-ink-muted px-4">
+      <footer className="border-t border-slate-200 mt-auto py-8 text-center print:hidden bg-white">
+        <p className="text-xs text-slate-600 px-4">
           CivicResolve AI anonymous tracking allows citizens to follow complaint resolution without logging in.
           All inquiries are authenticated through one-time cryptographic secrets.
         </p>
       </footer>
-    </>
+    </div>
   );
 };

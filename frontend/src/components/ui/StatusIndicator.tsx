@@ -132,6 +132,13 @@ function getStatusConfig(status: GrievanceStatus) {
           'bg-semantic-danger-bg text-semantic-danger-fg border-semantic-danger-border',
         icon: XCircle,
       };
+    case 'DISMISSED':
+      return {
+        label: 'Closed',
+        classes:
+          'bg-slate-100 text-slate-700 border-slate-300 font-medium',
+        icon: XCircle,
+      };
     default:
       return {
         label: String(status),

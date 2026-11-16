@@ -11,7 +11,8 @@ export type GrievanceStatus =
   | 'UNDER_REVIEW'
   | 'APPROVED'
   | 'OVERRIDDEN'
-  | 'REJECTED';
+  | 'REJECTED'
+  | 'DISMISSED';
 
 export type ReviewAction = 'APPROVE' | 'OVERRIDE' | 'REJECT';
 
