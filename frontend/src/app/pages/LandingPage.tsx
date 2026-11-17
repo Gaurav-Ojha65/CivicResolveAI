@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -11,87 +11,19 @@ import {
   AlertCircle,
   Menu,
   X,
-  Scale,
   Sparkles,
   CheckCircle2,
   Fingerprint,
   Shield,
   Layers,
+  Github,
 } from 'lucide-react';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import { Button } from '../../components/ui/Button';
 
-interface DemoScenario {
-  id: string;
-  tabLabel: string;
-  category: string;
-  confidence: number;
-  margin: number;
-  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM';
-  description: string;
-  highlightedWords: string[];
-  features: { feature: string; contribution: number; direction: 'pos' | 'neg' }[];
-  routeReason: string;
-}
-
-const DEMO_SCENARIOS: DemoScenario[] = [
-  {
-    id: 'credit-reporting',
-    tabLabel: 'Credit Dispute',
-    category: 'Credit reporting, repair, or other',
-    confidence: 96.4,
-    margin: 88.2,
-    priority: 'HIGH',
-    description:
-      'I submitted an official dispute to Equifax regarding an erroneous debt collection tradeline of $1,840 that does not belong to me. Over 35 days have passed without the required investigation results or consumer disclosure, causing severe credit score reduction.',
-    highlightedWords: ['equifax', 'dispute', 'tradeline', 'investigation', 'debt', 'erroneous'],
-    features: [
-      { feature: 'dispute', contribution: 0.384, direction: 'pos' },
-      { feature: 'tradeline', contribution: 0.312, direction: 'pos' },
-      { feature: 'equifax', contribution: 0.287, direction: 'pos' },
-      { feature: 'score reduction', contribution: 0.194, direction: 'pos' },
-    ],
-    routeReason: 'Flagged for FCRA 30-day investigation statutory violation review',
-  },
-  {
-    id: 'banking-overdraft',
-    tabLabel: 'Unauthorized Fee',
-    category: 'Checking or savings account',
-    confidence: 94.1,
-    margin: 81.5,
-    priority: 'MEDIUM',
-    description:
-      'My bank reordered debits from largest to smallest overnight, creating three sequential $35 overdraft fees on settled transactions while my available ledger balance remained positive throughout the settlement cycle.',
-    highlightedWords: ['bank', 'overdraft', 'fees', 'ledger', 'balance', 'debits'],
-    features: [
-      { feature: 'overdraft', contribution: 0.421, direction: 'pos' },
-      { feature: 'fees', contribution: 0.305, direction: 'pos' },
-      { feature: 'ledger balance', contribution: 0.264, direction: 'pos' },
-      { feature: 'settlement', contribution: 0.182, direction: 'pos' },
-    ],
-    routeReason: 'Automated fee reordering violation detection with account audit',
-  },
-  {
-    id: 'mortgage-servicing',
-    tabLabel: 'Escrow Shortfall',
-    category: 'Mortgage',
-    confidence: 97.8,
-    margin: 91.0,
-    priority: 'CRITICAL',
-    description:
-      'Loan servicer abruptly increased my monthly escrow payment by $640 without issuing the required annual escrow analysis statement. They threaten foreclosure proceedings despite verified automatic mortgage payments.',
-    highlightedWords: ['servicer', 'escrow', 'mortgage', 'foreclosure', 'statement'],
-    features: [
-      { feature: 'escrow', contribution: 0.458, direction: 'pos' },
-      { feature: 'servicer', contribution: 0.379, direction: 'pos' },
-      { feature: 'foreclosure', contribution: 0.341, direction: 'pos' },
-      { feature: 'mortgage', contribution: 0.295, direction: 'pos' },
-    ],
-    routeReason: 'Critical foreclosure exposure flagged for expedited human adjudication',
-  },
-];
 
 /**
- * LandingPage — high-trust, fintech-grade public front door for CivicResolve AI.
+ * LandingPage â€” high-trust, fintech-grade public front door for CivicResolve AI.
  *
  * Visual System & Structure:
  * 1. Precision navigation bar with brand mark, route anchors, and CTA
@@ -103,82 +35,156 @@ const DEMO_SCENARIOS: DemoScenario[] = [
  * 7. Comprehensive dark navy footer with legal disclaimers and navigation
  */
 export const LandingPage: React.FC = () => {
-  const defaultScenario: DemoScenario = DEMO_SCENARIOS[0]!;
   const [navOpen, setNavOpen] = useState(false);
-  const [activeScenarioId, setActiveScenarioId] = useState(defaultScenario.id);
+  const [scrolled, setScrolled] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const activeScenario: DemoScenario =
-    DEMO_SCENARIOS.find((s) => s.id === activeScenarioId) ?? defaultScenario;
+  // Scroll-aware navbar transition
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 80);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Framer Motion variants for staggered hero entrance (delays: 0.1, 0.25, 0.42, 0.58 s)
+  const heroContainerVariants: Variants = {
+    hidden: {},
+    visible: {},
+  };
+  const heroBadgeVariants: Variants = prefersReducedMotion
+    ? { hidden: {}, visible: {} }
+    : {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] } },
+      };
+  const heroH1Variants: Variants = prefersReducedMotion
+    ? { hidden: {}, visible: {} }
+    : {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay: 0.25, ease: [0.22, 1, 0.36, 1] } },
+      };
+  const heroParagraphVariants: Variants = prefersReducedMotion
+    ? { hidden: {}, visible: {} }
+    : {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay: 0.42, ease: [0.22, 1, 0.36, 1] } },
+      };
+  const heroCtasVariants: Variants = prefersReducedMotion
+    ? { hidden: {}, visible: {} }
+    : {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay: 0.58, ease: [0.22, 1, 0.36, 1] } },
+      };
 
   return (
     <>
-      {/* ── Navigation ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur-md">
+      {/* â”€â”€ Aurora Navbar (fixed, transparent â†’ white on scroll) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <header
+        className="fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,box-shadow] duration-200"
+        style={
+          scrolled
+            ? { backgroundColor: '#fff', borderBottom: '1px solid #E3E7ED', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }
+            : { backgroundColor: 'transparent', borderBottom: '1px solid transparent' }
+        }
+      >
         <nav
-          className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-18"
+          className="flex items-center justify-between"
+          style={{ padding: '26px 44px' }}
           aria-label="Main navigation"
         >
           {/* Brand mark */}
           <Link
             to="/"
-            className="flex items-center gap-3 text-ink-deep font-semibold text-lg tracking-tight hover:text-teal-trust transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded-lg py-1 px-1.5 -ml-1.5"
-            aria-label="CivicResolve AI — home"
+            className="flex items-center gap-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white rounded-lg"
+            aria-label="CivicResolve AI â€” home"
           >
-            <div className="w-9 h-9 rounded-xl bg-ink-deep flex items-center justify-center text-teal-trust shadow-sm border border-slate-700/60">
-              <ShieldCheck className="w-5 h-5 text-teal-400 shrink-0" aria-hidden="true" />
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm"
+              style={{ backgroundColor: scrolled ? '#0B1F3A' : 'rgba(255,255,255,0.12)', border: scrolled ? 'none' : '1px solid rgba(255,255,255,0.22)' }}
+            >
+              <ShieldCheck
+                className="w-5 h-5 shrink-0"
+                style={{ color: scrolled ? '#2DD4BF' : '#fff' }}
+                aria-hidden="true"
+              />
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col leading-none">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-ink-deep text-base tracking-tight font-sans">
+                <span
+                  className="font-extrabold text-base tracking-tight font-sans"
+                  style={{ color: scrolled ? '#0B1F3A' : '#fff' }}
+                >
                   CivicResolve
                 </span>
-                <span className="text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-teal-trust/10 text-teal-trust border border-teal-trust/20">
+                <span
+                  className="text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded"
+                  style={
+                    scrolled
+                      ? { backgroundColor: 'rgba(13,148,136,0.1)', color: '#0D9488', border: '1px solid rgba(13,148,136,0.2)' }
+                      : { backgroundColor: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.22)' }
+                  }
+                >
                   AI
                 </span>
               </div>
-              <span className="text-[11px] text-ink-muted -mt-0.5 hidden sm:inline">
+              <span
+                className="text-[11px] -mt-0.5 hidden sm:inline"
+                style={{ color: scrolled ? '#64748B' : 'rgba(255,255,255,0.65)' }}
+              >
                 Fintech Grievance Intelligence
               </span>
             </div>
           </Link>
 
           {/* Desktop nav links */}
-          <div className="hidden md:flex items-center gap-8">
-            <a
-              href="#how-it-works"
-              className="text-sm font-medium text-slate-600 hover:text-ink transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
-            >
-              How It Works
-            </a>
-            <a
-              href="#transparency"
-              className="text-sm font-medium text-slate-600 hover:text-ink transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
-            >
-              About
-            </a>
+          <div className="hidden md:flex items-center gap-7">
+            {[
+              { label: 'How It Works', href: '#how-it-works', isAnchor: true },
+              { label: 'About', href: '#transparency', isAnchor: true },
+            ].map(({ label, href }) => (
+              <a
+                key={label}
+                href={href}
+                className="text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white rounded"
+                style={{ color: scrolled ? '#475569' : 'rgba(255,255,255,0.82)' }}
+              >
+                {label}
+              </a>
+            ))}
             <Link
               to="/track"
-              className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white rounded"
+              style={{ color: scrolled ? '#475569' : 'rgba(255,255,255,0.82)' }}
             >
               Track Complaint
             </Link>
             <Link
               to="/reviewer/login"
-              className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white rounded"
+              style={{ color: scrolled ? '#475569' : 'rgba(255,255,255,0.82)' }}
             >
               Reviewer Portal
             </Link>
-            <Link to="/submit">
-              <Button size="sm" variant="primary" className="shadow-xs font-semibold">
-                Submit Complaint
-                <ArrowRight className="w-3.5 h-3.5 ml-1.5" aria-hidden="true" />
-              </Button>
+            {/* CTA Pill */}
+            <Link
+              to="/submit"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-semibold text-sm transition-transform hover:scale-[1.03] active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white whitespace-nowrap"
+              style={
+                scrolled
+                  ? { backgroundColor: '#0B1F3A', color: '#fff' }
+                  : { backgroundColor: '#fff', color: '#0B1F3A' }
+              }
+            >
+              Submit Complaint
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
             </Link>
           </div>
 
           {/* Mobile hamburger */}
           <button
-            className="md:hidden p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-canvas transition-colors border border-border focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+            className="md:hidden p-2 rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            style={{ color: scrolled ? '#475569' : '#fff', border: scrolled ? '1px solid #E3E7ED' : '1px solid rgba(255,255,255,0.3)' }}
             onClick={() => setNavOpen((o) => !o)}
             aria-expanded={navOpen}
             aria-controls="mobile-nav"
@@ -196,32 +202,33 @@ export const LandingPage: React.FC = () => {
         {navOpen && (
           <div
             id="mobile-nav"
-            className="md:hidden border-t border-border bg-surface px-4 py-4 flex flex-col gap-3 shadow-lg"
+            className="md:hidden border-t px-4 py-4 flex flex-col gap-3 shadow-lg"
+            style={{ backgroundColor: '#fff', borderColor: '#E3E7ED' }}
           >
             <a
               href="#how-it-works"
-              className="text-sm font-medium text-ink-muted hover:text-ink py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-slate-900 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 rounded"
               onClick={() => setNavOpen(false)}
             >
               How It Works
             </a>
             <a
               href="#transparency"
-              className="text-sm font-medium text-ink-muted hover:text-ink py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-slate-900 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 rounded"
               onClick={() => setNavOpen(false)}
             >
               About
             </a>
             <Link
               to="/track"
-              className="text-sm font-medium text-ink-muted hover:text-teal-trust py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-teal-700 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 rounded"
               onClick={() => setNavOpen(false)}
             >
               Track Complaint
             </Link>
             <Link
               to="/reviewer/login"
-              className="text-sm font-medium text-ink-muted hover:text-teal-trust py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
+              className="text-sm font-medium text-slate-600 hover:text-teal-700 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500 rounded"
               onClick={() => setNavOpen(false)}
             >
               Reviewer Portal
@@ -236,230 +243,190 @@ export const LandingPage: React.FC = () => {
         )}
       </header>
 
-      {/* ── Main content landmark ───────────────────────────────────────────── */}
+      {/* â”€â”€ Main content landmark â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <main id="main-content">
-        {/* ── Hero Section with Live Interactive Triage Simulation ──────────── */}
+        {/* â”€â”€ Aurora Cinematic Hero (100svh full-bleed video) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <section
           aria-labelledby="hero-heading"
-          className="relative overflow-hidden bg-gradient-to-b from-canvas via-surface to-canvas border-b border-border pt-16 pb-20 sm:pt-24 sm:pb-28"
+          style={{ position: 'relative', minHeight: '100svh', overflow: 'hidden', backgroundColor: '#062B22' }}
         >
-          {/* Subtle architectural background grid */}
+          {/* Background video â€” hidden when user prefers reduced motion */}
+          {!prefersReducedMotion && (
+            <video
+              ref={videoRef}
+              aria-hidden="true"
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster="/hero-poster.jpg"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                zIndex: 0,
+              }}
+            >
+              <source src="/hero.mp4" type="video/mp4" />
+            </video>
+          )}
+
+          {/* Overlay stack: base darkening + left-to-right gradient for text legibility */}
           <div
-            className="absolute inset-0 opacity-[0.03] pointer-events-none"
-            style={{
-              backgroundImage:
-                'radial-gradient(#0F172A 1px, transparent 1px), radial-gradient(#0F172A 1px, #F8FAFC 1px)',
-              backgroundSize: '32px 32px',
-              backgroundPosition: '0 0, 16px 16px',
-            }}
             aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 1,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 2,
+              background: 'linear-gradient(to right, rgba(0,0,0,0.55) 0%, transparent 70%)',
+            }}
           />
 
-          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-              {/* Left Column: Editorial Value Pitch */}
-              <div className="lg:col-span-6 space-y-6">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-trust/10 text-teal-trust text-xs font-semibold border border-teal-trust/20 tracking-wide">
-                  <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Fintech-Grade Grievance Intelligence</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse ml-0.5" />
-                </div>
+          {/* Hero content — anchored top-left */}
+          <motion.div
+            variants={heroContainerVariants}
+            initial="hidden"
+            animate="visible"
+            className="relative z-10 flex flex-col items-start px-6 md:px-16 max-w-2xl"
+            style={{
+              paddingTop: '24vh',
+            }}
+          >
+            {/* Badge pill */}
+            <motion.div variants={heroBadgeVariants}>
+              <div
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-white"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                }}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                Explainable AI triage for consumer complaints
+              </div>
+            </motion.div>
 
-                <h1
-                  id="hero-heading"
-                  className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-ink-deep leading-[1.12] tracking-tight font-sans"
-                  style={{ textWrap: 'balance' }}
+            {/* Headline */}
+            <motion.h1
+              id="hero-heading"
+              variants={heroH1Variants}
+              style={{
+                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
+                fontWeight: 500,
+                fontSize: 'clamp(2.4rem, 4.6vw, 4.1rem)',
+                lineHeight: 1.08,
+                letterSpacing: '-0.02em',
+                color: '#fff',
+                marginTop: '1.25rem',
+                marginBottom: 0,
+              }}
+            >
+              Bring clarity to your
+              <br />
+              <span style={{ color: '#C8F169' }}>financial grievance.</span>
+            </motion.h1>
+
+            {/* Sub-paragraph */}
+            <motion.p
+              variants={heroParagraphVariants}
+              style={{
+                fontSize: 15,
+                color: 'rgba(255,255,255,0.78)',
+                maxWidth: 420,
+                lineHeight: 1.65,
+                marginTop: '1.25rem',
+              }}
+            >
+              CivicResolve AI classifies your consumer-finance complaint and routes it for
+              human review. You get a preliminary assessment right away.
+            </motion.p>
+
+            {/* CTA buttons */}
+            <motion.div
+              variants={heroCtasVariants}
+              style={{ marginTop: '2rem', display: 'flex', flexWrap: 'wrap', gap: 12 }}
+            >
+              <Link to="/submit">
+                <motion.span
+                  whileHover={prefersReducedMotion ? {} : { scale: 1.03 }}
+                  whileTap={prefersReducedMotion ? {} : { scale: 0.97 }}
+                  style={{ display: 'block' }}
                 >
-                  Bring clarity to your
-                  <br />
-                  <span className="text-teal-trust bg-gradient-to-r from-teal-700 via-teal-600 to-teal-500 bg-clip-text text-transparent">
-                    financial grievance.
+                  <span
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-full font-semibold text-sm cursor-pointer whitespace-nowrap"
+                    style={{ backgroundColor: '#0a0a0a', color: '#fff' }}
+                  >
+                    Submit Your Complaint
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
                   </span>
-                </h1>
+                </motion.span>
+              </Link>
+              <Link to="/track">
+                <motion.span
+                  whileHover={prefersReducedMotion ? {} : { scale: 1.03 }}
+                  whileTap={prefersReducedMotion ? {} : { scale: 0.97 }}
+                  style={{ display: 'block' }}
+                >
+                  <span
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-full font-semibold text-sm cursor-pointer whitespace-nowrap"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                      color: '#fff',
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    Track Existing Complaint
+                  </span>
+                </motion.span>
+              </Link>
+            </motion.div>
 
-                <p className="text-base sm:text-lg text-ink-muted leading-relaxed max-w-xl">
-                  CivicResolve AI uses automated classification and human oversight to help
-                  route your consumer-finance complaint to the right place. Submit your
-                  concern and receive an immediate preliminary assessment.
-                </p>
+            {/* Demo notice */}
+            <motion.p
+              variants={heroCtasVariants}
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.65)',
+                marginTop: '1rem',
+              }}
+            >
+              Demo platform. Don&apos;t enter real personal or financial information.
+            </motion.p>
+          </motion.div>
 
-                {/* Primary CTA Row */}
-                <div className="pt-2 flex flex-col sm:flex-row gap-3.5">
-                  <Link to="/submit">
-                    <Button size="lg" variant="primary" className="shadow-md shadow-teal-900/10 font-bold w-full sm:w-auto">
-                      Submit Your Complaint
-                      <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
-                    </Button>
-                  </Link>
-                  <Link to="/track">
-                    <Button size="lg" variant="secondary" className="border-border hover:bg-slate-50 font-semibold w-full sm:w-auto">
-                      Track Existing Complaint
-                    </Button>
-                  </Link>
-                </div>
-
-                {/* Micro Trust Proofs */}
-                <div className="pt-4 grid grid-cols-3 gap-4 border-t border-line">
-                  <div>
-                    <span className="block text-xl sm:text-2xl font-extrabold text-ink font-mono">
-                      8
-                    </span>
-                    <span className="text-xs font-medium text-slate-600">
-                      CFPB Taxonomies
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xl sm:text-2xl font-extrabold text-brand-700 font-mono">
-                      100%
-                    </span>
-                    <span className="text-xs font-medium text-slate-600">
-                      Human review on every adjudication
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xl sm:text-2xl font-extrabold text-ink font-mono">
-                      SHA-256
-                    </span>
-                    <span className="text-xs font-medium text-slate-600">
-                      Model Provenance
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Clean White Enterprise Preview Card */}
-              <div className="lg:col-span-6">
-                <div className="rounded-[10px] border border-line bg-white shadow-card overflow-hidden">
-                  {/* Clean Header */}
-                  <div className="px-5 py-3.5 bg-white border-b border-line flex items-center justify-between text-ink">
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-slate-200" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-                      </div>
-                      <span className="text-xs font-mono font-medium text-slate-600 ml-2">
-                        nlp-triage-pipeline: live preview
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold">
-                      <Sparkles className="w-3 h-3 text-teal-700" />
-                      LINEAR XAI
-                    </div>
-                  </div>
-
-                  {/* Interactive Scenario Tabs */}
-                  <div className="px-5 pt-3 pb-2 bg-slate-50 border-b border-line flex items-center gap-2 overflow-x-auto">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 shrink-0 mr-1">
-                      Sample Case:
-                    </span>
-                    {DEMO_SCENARIOS.map((scenario) => (
-                      <button
-                        key={scenario.id}
-                        type="button"
-                        onClick={() => setActiveScenarioId(scenario.id)}
-                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer ${
-                          activeScenarioId === scenario.id
-                            ? 'bg-white text-ink border border-line shadow-2xs font-bold'
-                            : 'text-slate-600 hover:text-ink hover:bg-white/60'
-                        }`}
-                      >
-                        {scenario.tabLabel}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Grievance Narrative with Real-time Token Attribution Highlights */}
-                  <div className="p-5 space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                          Citizen Grievance Narrative:
-                        </span>
-                        <span className="text-xs font-mono text-slate-500">
-                          token highlights active
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-[10px] bg-slate-50 border border-line text-xs leading-relaxed text-ink font-sans">
-                        {activeScenario.description.split(' ').map((word, idx) => {
-                          const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
-                          const isHighlighted = activeScenario.highlightedWords.includes(cleanWord);
-                          return (
-                            <span
-                              key={idx}
-                              className={
-                                isHighlighted
-                                  ? 'bg-teal-50 text-teal-900 font-bold px-1 py-0.5 rounded border border-teal-200 mx-0.5'
-                                  : 'mx-0.5'
-                              }
-                            >
-                              {word}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Output Triage Classification Panel */}
-                    <div className="p-4 rounded-[10px] bg-white border border-line shadow-2xs space-y-3">
-                      <div className="flex items-center justify-between border-b border-line pb-3">
-                        <div>
-                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                            Predicted CFPB Category
-                          </span>
-                          <span className="text-sm font-extrabold text-ink font-sans">
-                            {activeScenario.category}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                            Confidence
-                          </span>
-                          <span className="text-base font-extrabold text-brand-700 font-mono tabular-nums">
-                            {activeScenario.confidence}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Linear Feature Attribution Tokens (Wrapped, not clipped) */}
-                      <div>
-                        <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1.5">
-                          <span className="flex items-center gap-1">
-                            <Scale className="w-3.5 h-3.5 text-brand-600" />
-                            Top Positive Feature Attributions:
-                          </span>
-                          <span className="font-mono text-xs text-slate-500 tabular-nums">Decision Margin: {activeScenario.margin}%</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {activeScenario.features.map((feat) => (
-                            <div
-                              key={feat.feature}
-                              className="p-2 rounded-lg bg-slate-50 border border-line flex items-center justify-between text-xs font-mono"
-                            >
-                              <span className="font-semibold text-ink truncate pr-1">
-                                {feat.feature}
-                              </span>
-                              <span className="text-emerald-700 font-bold shrink-0 tabular-nums">
-                                +{feat.contribution.toFixed(3)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Human Routing Notice */}
-                      <div className="pt-1 flex items-start gap-2 text-xs text-slate-700 bg-teal-50/60 p-2.5 rounded-lg border border-teal-200">
-                        <Users className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
-                        <div>
-                          <span className="font-bold text-ink">Triage Recommendation:</span>{' '}
-                          {activeScenario.routeReason}.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* Bottom-left GitHub link */}
+          <div className="absolute bottom-6 left-6 md:bottom-[34px] md:left-16 z-20">
+            <a
+              href="https://github.com/Gaurav-Ojha65/CivicResolveAI"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub"
+              className="flex items-center justify-center w-10 h-10 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                color: '#fff',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+              }}
+            >
+              <Github className="w-5 h-5" aria-hidden="true" />
+            </a>
           </div>
         </section>
 
@@ -469,8 +436,8 @@ export const LandingPage: React.FC = () => {
           aria-labelledby="how-it-works-heading"
           className="bg-surface border-b border-border py-20 sm:py-28"
         >
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="mx-auto max-w-7xl px-6 md:px-16">
+            <div className="text-left max-w-3xl mb-16">
               <span className="text-xs font-bold uppercase tracking-widest text-teal-trust">
                 Structured Lifecycle
               </span>
@@ -482,7 +449,7 @@ export const LandingPage: React.FC = () => {
                 How It Works
               </h2>
               <p className="mt-3 text-base text-ink-muted leading-relaxed">
-                Your complaint is handled in three steps — from submission through
+                Your complaint is handled in three steps â€” from submission through
                 automated classification to human review.
               </p>
             </div>
@@ -577,7 +544,7 @@ export const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* ── Comprehensive Asymmetric Bento-Grid Value Proposition ────────────── */}
+        {/* â”€â”€ Comprehensive Asymmetric Bento-Grid Value Proposition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <section className="bg-canvas border-b border-border py-20 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl mb-14">
@@ -675,7 +642,7 @@ export const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* ── AI Transparency Section ─────────────────────────────────────────── */}
+        {/* â”€â”€ AI Transparency Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <section
           id="transparency"
           aria-labelledby="transparency-heading"
@@ -735,7 +702,7 @@ export const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* ── Privacy & Trust Section ────────────────────────────────────────── */}
+        {/* â”€â”€ Privacy & Trust Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <section
           aria-labelledby="privacy-heading"
           className="bg-surface border-t border-border py-20 sm:py-28"
@@ -799,7 +766,7 @@ export const LandingPage: React.FC = () => {
         </section>
       </main>
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <footer className="border-t border-slate-800 bg-slate-950 text-slate-400">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-10">
