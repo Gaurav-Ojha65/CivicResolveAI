@@ -33,7 +33,7 @@ CivicResolve AI is an enterprise-grade consumer financial grievance triage and d
 
 Financial institutions handle millions of consumer complaints regarding mortgages, credit cards, debt collection, credit reporting, bank accounts, and student loans. Manual triage creates substantial operational and regulatory bottlenecks:
 
-- **SLA Breaches & Ingestion Latency**: High narrative volume overwhelms manual routing queues, jeopardizing statutory response windows.
+- **Queue Backlogs & Ingestion Latency**: High narrative volume can overwhelm manual routing queues and increase case age.
 - **Inconsistent Categorization**: Complex or ambiguous grievances (e.g., identity theft impacting credit reports and collections simultaneously) are frequently misassigned across disparate departments.
 - **Consumer Trust Deficit**: Citizens typically submit complaints into opaque systems without verifiable cryptographic receipts or real-time progression visibility.
 - **Black-Box AI Risk**: Autonomous deep neural networks cannot be deployed blindly in regulated compliance workflows without deterministic feature attribution, auditability, and human override capabilities.
@@ -42,7 +42,7 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 - **Instant Citizen Safeguards**: Real-time pre-submission triage feedback and privacy-first narrative evaluation before submission.
 - **Explainable Linear Feature Attribution**: Deterministic n-gram token weighting that explicitly demonstrates *why* a complaint was categorized into a specific product bucket.
 - **Cryptographic Tracking Tokens**: High-entropy, one-time tracking credentials where only salted SHA-256 hashes are persisted.
-- **Flagship Decision Intelligence Lab**: A dedicated 3-Zone reviewer workbench featuring counterfactual what-if simulation, live dual-model comparison, precedent consistency analysis using Lexical TF-IDF Cosine Similarity, and statutory audit timelines.
+- **Flagship Decision Intelligence Lab**: A dedicated 3-Zone reviewer workbench featuring counterfactual what-if simulation, live dual-model comparison, precedent consistency analysis using Lexical TF-IDF Cosine Similarity, and chronological audit timelines.
 - **Enterprise Defense-in-Depth**: Strict PostgreSQL dual-role separation (least-privilege DML vs. Flyway DDL migrator), optimistic concurrency locking (`HTTP 409`), in-memory token-bucket rate limiting, and RFC 9457 structured error handling.
 
 ---
@@ -56,7 +56,7 @@ Financial institutions handle millions of consumer complaints regarding mortgage
    - Accessible form enforcing client- and server-side narrative validation (20 to 5,000 characters).
    - Pre-submission client safeguard inspector and explicit privacy notice disclosing PII redaction.
 3. **One-Time Cryptographic Tracking Receipt**:
-   - On submission, the citizen receives a unique reference number (e.g., `CR-2026-XXXX`) and a high-entropy tracking secret (`trk_...`).
+   - On submission, the citizen receives the grievance UUID in `id` and a high-entropy tracking secret (`trk_...`).
    - The plaintext secret is displayed **only once**; only its SHA-256 hash is persisted in PostgreSQL.
 4. **Scrubbed Public Tracking Timeline (`/track`)**:
    - Citizens track case progress via Reference ID + Secret.
@@ -66,8 +66,8 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 ### B. Adjudication & Compliance Officer Journey
 1. **Authenticated Reviewer Portal (`/reviewer/login`)**:
    - Secured by Spring Security HTTP Basic authentication with BCrypt-12 hashed credentials.
-2. **Reviewer Queue & Dashboard (`/reviewer/dashboard`)**:
-   - Real-time queue filtering by status (`AUTO_ROUTED`, `PENDING_REVIEW`, `UNDER_INVESTIGATION`, `RESOLVED`, `DISMISSED`) and priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+2. **Reviewer Queue & Dashboard (`/reviewer`)**:
+   - Queue filtering by persisted workflow status (`AUTO_ROUTED`, `PENDING_REVIEW`, `APPROVED`, `OVERRIDDEN`, `REJECTED`) and priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
    - Optimistic concurrency control via JPA `@Version` prevents race conditions with standard `HTTP 409 Conflict`.
 3. **Decision Intelligence Lab (`/reviewer/grievances/:id`)**:
    - Comprehensive investigation environment combining immutable case anchors, what-if narrative experimentation, live dual-model arbitration, and precedent retrieval via Lexical TF-IDF Cosine Similarity.
@@ -82,7 +82,7 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 | :--- | :--- | :--- | :--- |
 | **Frontend** | Single Page Application | React 18, TypeScript, Vite | Tailwind CSS, Lucide Icons, Headless UI, Vitest, Testing Library |
 | **Backend API** | Enterprise REST Service | Java 21 / 25, Spring Boot | Spring Boot 4.1.1, Spring Data JPA, Spring Security, Hibernate 7, Flyway 10, HikariCP |
-| **NLP Microservice** | Inference Engine & Triage | Python 3.11+, FastAPI, Uvicorn | Scikit-learn, PyTorch, Pandas, NumPy, Pydantic v2, Joblib, VADER Sentiment |
+| **NLP Microservice** | Inference Engine & Triage | Python 3.12+, FastAPI, Uvicorn | Scikit-learn, PyTorch, Pandas, NumPy, Pydantic v2, Joblib, VADER Sentiment |
 | **Persistence** | Relational Database | PostgreSQL 16+ | Flyway Schema Migrations (V1–V6), Dual-Role Security Isolation |
 | **Protocols & Standards** | API & Security Standards | REST, RFC 9457 Problem Details | HTTP Basic Auth (BCrypt-12), SHA-256 Hashing, Token Bucket Limiting |
 
@@ -143,7 +143,7 @@ product_categories")]
     DbGuard -.->|Enforces Least-Privilege Role| AppRole
     MigratorRole -->|Executes Schema DDL| DbTables
     AppRole -->|SELECT, INSERT, UPDATE| DbTables
-    NlpClient -->|HTTP /classify, /compare-models| FastAPIApp
+    NlpClient -->|HTTP /classify, /classify/compare| FastAPIApp
     FastAPIApp --> ModelMgr
     ModelMgr --> BaselineModel
     ModelMgr --> ChallengerModel
@@ -187,7 +187,7 @@ CivicResolveAI/
 │       │   └── resources/
 │       │       ├── application.properties
 │       │       └── db/migration/       # Flyway SQL migrations (V1 to V6)
-│       └── test/                       # 263 Unit tests & 23 live PostgreSQL integration tests
+│       └── test/                       # Unit, controller, service, and PostgreSQL integration tests
 │
 ├── frontend/                           # React 18 + TypeScript + Vite SPA
 │   ├── package.json                    # Frontend dependencies & npm scripts
@@ -205,7 +205,7 @@ CivicResolveAI/
 │   │   │       ├── hooks/              # useTriageShortcuts, navigation
 │   │   │       └── ReviewerGrievanceDetailPage.tsx
 │   │   └── lib/api/                    # Type-safe API client and endpoint contracts
-│   └── tests/                          # 202 Vitest unit, component, and a11y tests (32 files)
+│   └── tests/                          # Vitest unit, component, responsive, and accessibility tests
 │
 └── nlp-service/                        # Python FastAPI Microservice
     ├── requirements.txt                # Python dependencies (scikit-learn, torch, fastapi)
@@ -222,7 +222,7 @@ CivicResolveAI/
     │   ├── bilstm_config.json          # Neural network hyperparameters
     │   ├── vocab.json                  # Vocabulary token-to-index mapping
     │   └── *.json / *.csv              # Calibration metrics & confusion matrices
-    └── tests/                          # 145 Pytest unit, concurrency, and validation tests
+    └── tests/                          # Pytest unit, concurrency, artifact, and validation tests
 ```
 
 ---
@@ -284,7 +284,7 @@ The reviewer interface (`/reviewer/grievances/:id`) contains our flagship intera
 │ ┌─────────────────────────────────────────────────────────┐ │ ┌─────────────────────────────────────┐ │
 │ │ Zone A: Immutable Case Anchor                           │ │ │ Adjudication Controls               │ │
 │ │ • "IMMUTABLE PERSISTED RECORD" Badge                    │ │ │ • Action: APPROVE / OVERRIDE / etc. │ │
-│ │ • Version Pill, SLA Counter, Provenance SHA-256         │ │ │ • Target Priority / Target Category │ │
+│ │ • Version Pill, Queue Age, Provenance SHA-256           │ │ │ • Target Priority / Target Category │ │
 │ │ • Original Narrative Display                            │ │ │ • Reason / Adjudication Note Input  │ │
 │ │ • Linear Feature Attributions & Diverging Bar Chart     │ │ └─────────────────────────────────────┘ │
 │ └─────────────────────────────────────────────────────────┘ │ ┌─────────────────────────────────────┐ │
@@ -304,7 +304,7 @@ The reviewer interface (`/reviewer/grievances/:id`) contains our flagship intera
 │ │ • Exact Telemetry: Active Features vs Sequence Tokens   │
 │ │ • Delta Telemetry vs Zone A Anchor                      │
 │ │ • Model Provenance Check                                │
-│ │ • Statutory & ML Governance Disclosure                  │
+│ │ • Model Governance Disclosure                           │
 │ │ • Action: "Copy Replay Summary to Review Note"          │
 │ └─────────────────────────────────────────────────────────┘
 └───────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -312,7 +312,7 @@ The reviewer interface (`/reviewer/grievances/:id`) contains our flagship intera
 
 ### Lab Components & Capabilities:
 1. **Zone A (Immutable Persisted Anchor)**:
-   - Displays the permanent complaint narrative, original baseline prediction, SLA status, and active model version hash.
+   - Displays the permanent complaint narrative, original baseline prediction, operational queue age, and active model version hash. Queue age is not a configured or legally verified deadline.
    - Houses the `LinearAttributionHighlighter` and `DivergingFeatureBarChart` highlighting positive and negative token forces.
 2. **Zone B (Counterfactual "What-If" Narrative Lab)**:
    - Provides an isolated sandbox editor (`10–10,000` chars) allowing reviewers to simulate narrative modifications (e.g., adding explicit debt validation terms or removing payment references).
@@ -359,10 +359,10 @@ Startup validation in `DatabaseIsolationGuard.java` verifies that `civicresolve_
 ## 9. Prerequisites & Environment Setup
 
 ### Required Tooling
-- **Java**: OpenJDK 21 or 25 (`java -version`)
+- **Java**: OpenJDK 25 (`java -version`; matches `backend/pom.xml` and CI)
 - **Maven**: Version 3.9+ (or use the included `./backend/mvnw.cmd` / `./backend/mvnw`)
-- **Node.js**: Version 18.0+ & npm (`node -v`, `npm -v`)
-- **Python**: Version 3.11+ (`python --version`)
+- **Node.js**: Version 22 & npm (`node -v`, `npm -v`; matches CI)
+- **Python**: Version 3.12+ (`python --version`; CI uses 3.12)
 - **PostgreSQL**: Version 16+ (`psql --version`)
 
 ---
@@ -422,10 +422,9 @@ CREATE ROLE civicresolve_migrator WITH LOGIN PASSWORD '<YOUR_MIGRATOR_ROLE_PASSW
 CREATE ROLE civicresolve_app WITH LOGIN PASSWORD '<YOUR_APP_ROLE_PASSWORD>';
 
 \c civicresolve
-GRANT ALL PRIVILEGES ON SCHEMA public TO civicresolve_migrator;
+GRANT CONNECT ON DATABASE civicresolve TO civicresolve_migrator, civicresolve_app;
+ALTER SCHEMA public OWNER TO civicresolve_migrator;
 GRANT USAGE ON SCHEMA public TO civicresolve_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO civicresolve_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO civicresolve_app;
 ```
 
 ### Step 2: Start the FastAPI NLP Service (Port 8000)
@@ -461,35 +460,35 @@ Open `http://localhost:3000` in your browser. Reviewer portal is located at `htt
 
 ### Backend Unit & Integration Tests
 ```powershell
-# Execute all 263 unit and slice tests
+# Execute unit, controller, and service tests
 .\backend\mvnw.cmd test
 
 # Execute live PostgreSQL integration tests (Failsafe plugin)
-# Note: Requires SPRING_DATASOURCE_PASSWORD targeting dedicated civicresolve_test database
+# Requires all datasource and Flyway variables to target an isolated civicresolve_test database.
 .\backend\mvnw.cmd verify
 ```
-*Verified result*: `Tests run: 263, Failures: 0, Errors: 0, Skipped: 0` (`BUILD SUCCESS`).
 
 ### Frontend Test Suite
 ```powershell
 cd frontend
 
-# Execute full Vitest suite (202 tests across 32 files)
+# Execute the full Vitest suite
 npm test
 
-# Verify TypeScript compilation and production bundle build
+# Validate TypeScript and build the production bundle
+npm run typecheck
 npm run build
 ```
-*Verified result*: `Test Files: 32 passed (32), Tests: 202 passed (202)`.
 
 ### NLP Microservice Tests
 ```powershell
 cd nlp-service
 
-# Execute all 145 Pytest unit, concurrency, and validation tests
-pytest tests/ -v
+# Execute Pytest unit, concurrency, artifact, and validation tests
+python -m pytest tests/ -v
 ```
-*Verified result*: `145 passed in nlp-service/tests`.
+
+GitHub Actions runs the same three tracks in `.github/workflows/ci.yml`. The backend job provisions PostgreSQL 16 with separate `civicresolve_migrator` and `civicresolve_app` roles before `mvn verify`. Treat each current CI or local command output as the authoritative pass, fail, and skip count; this document does not preserve stale historical counts.
 
 ---
 
@@ -502,8 +501,8 @@ CivicResolve AI is trained on historical consumer financial grievances from the 
 - Pre-split deduplication and stratified sampling pipelines are documented in `nlp-service/training/data_split.py`.
 
 ### Model Artifacts Included Directly
-To ensure immediate execution upon cloning, safe pre-trained model weights are included directly in `nlp-service/models_saved/` under standard GitHub file limits:
-- `baseline_tfidf_logreg.joblib` (5.02 MB): Production TF-IDF vectorizer and calibrated logistic regression weights.
+To support local execution after cloning, versioned pre-trained model artifacts are included directly in `nlp-service/models_saved/` under standard GitHub file limits. Load these serialized artifacts only from this trusted repository boundary:
+- `baseline_tfidf_logreg.joblib` (5.02 MB): Production TF-IDF vectorizer and balanced logistic regression weights. Serving probabilities remain uncalibrated estimates.
 - `bilstm_best.pt` (34.33 MB): PyTorch checkpoint for the challenger neural network.
 - `vocab.json` (487 KB) & `bilstm_config.json` (1 KB): Vocabulary index and hyperparameter configurations.
 - `baseline_eval_*.json`, `bilstm_eval_*.json`: Evaluation metrics and validation confusion matrices.
@@ -515,7 +514,7 @@ To ensure immediate execution upon cloning, safe pre-trained model weights are i
 ## 14. Known Limitations & Disclaimers
 
 1. **Pre-Removal Snapshot Boundary**: Complaint narratives reflect historical CFPB structures; production deployments connecting to external regulatory APIs must incorporate authorized narrative ingestion streams.
-2. **Statutory & Legal Scope**: CivicResolve AI provides intelligent preliminary triage recommendations. It is not an automated judicial engine and does not make binding legal determinations without human reviewer adjudication.
+2. **Decision Scope**: CivicResolve AI provides preliminary triage recommendations. Queue-age indicators are operational measurements, not configured legal deadlines, and the system does not make binding legal determinations without human reviewer adjudication.
 3. **Single-Node Rate Limiter**: The current IP rate limiter operates in-memory; enterprise multi-region clusters should configure a distributed Redis cache.
 4. **Hardware Acceleration**: The PyTorch Bi-LSTM challenger runs CPU inference by default for portable local deployment; high-throughput batch evaluation benefits from a CUDA-capable runtime.
 

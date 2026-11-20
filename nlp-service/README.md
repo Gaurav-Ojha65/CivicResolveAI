@@ -27,7 +27,7 @@ The service loads the validated classical baseline:
 
 ## 2. Environment & Installation
 
-The project uses Python 3.14 inside `.venv`.
+CI and the supported baseline use Python 3.12. A newer local interpreter may work, but must pass the full suite before it is treated as supported.
 
 ```powershell
 # Activate project virtual environment
@@ -37,17 +37,7 @@ The project uses Python 3.14 inside `.venv`.
 .\.venv\Scripts\python.exe -m pip install -r nlp-service/requirements.txt
 ```
 
-### Exact Core Package Versions
-- `python`: 3.14.7
-- `fastapi`: 0.156.1
-- `uvicorn`: 0.54.0
-- `pydantic`: 2.14.1
-- `scikit-learn`: 1.9.1
-- `torch`: 2.14.1+cu126 (CUDA 12.6)
-- `pandas`: 3.0.6
-- `vaderSentiment`: 3.3.2
-- `httpx`: 0.28.1
-- `pytest`: 9.1.1
+The supported dependency ranges are defined in `requirements.txt`. They are ranges rather than a lock file, so CI output is the authoritative record of the resolved environment for a run.
 
 ---
 

@@ -355,6 +355,19 @@ public class GrievanceController {
 
     private static String escapeCsv(String value) {
         if (value == null) return "\"\"";
-        return "\"" + value.replace("\"", "\"\"") + "\"";
+        String textPrefix = needsCsvTextPrefix(value) ? "'" : "";
+        return "\"" + textPrefix + value.replace("\"", "\"\"") + "\"";
+    }
+
+    private static boolean needsCsvTextPrefix(String value) {
+        // Spreadsheet importers can ignore leading whitespace, control and format characters.
+        for (int offset = 0; offset < value.length();) {
+            int ch = value.codePointAt(offset);
+            if ("=+-@＝＋－＠\t\r\n".indexOf(ch) >= 0) return true;
+            if (!Character.isWhitespace(ch) && !Character.isSpaceChar(ch) && !Character.isISOControl(ch)
+                    && Character.getType(ch) != Character.FORMAT) return false;
+            offset += Character.charCount(ch);
+        }
+        return false;
     }
 }

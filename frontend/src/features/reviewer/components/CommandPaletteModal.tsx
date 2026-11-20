@@ -67,27 +67,31 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   // Debounced search for complaint ID or category
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setSearchResults([]);
+    setSearchResults([]);
+    if (!isOpen || trimmed.length < 2) {
       setIsSearching(false);
       return;
     }
 
+    const controller = new AbortController();
+    const { signal } = controller;
+    setIsSearching(true);
     const timer = setTimeout(async () => {
-      setIsSearching(true);
       try {
-        const res = await listGrievances({ search: trimmed, size: 5 });
-        setSearchResults(res.content || []);
+        const res = await listGrievances({ search: trimmed, size: 5 }, signal);
+        if (!signal.aborted) setSearchResults(res.content);
       } catch (err) {
-        console.error('Command palette search error:', err);
-        setSearchResults([]);
+        if (!signal.aborted) console.error('Command palette search error:', err);
       } finally {
-        setIsSearching(false);
+        if (!signal.aborted) setIsSearching(false);
       }
     }, 200);
 
-    return () => clearTimeout(timer);
-  }, [query]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isOpen, query]);
 
   const handleSeedExecution = async () => {
     setIsSeeding(true);
@@ -112,7 +116,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     {
       id: 'route-overview',
       title: 'Reviewer Overview & Queue',
-      subtitle: 'Triage pending consumer grievances, SLA alerts, and real-time workload',
+      subtitle: 'Triage pending consumer grievances, queue age, and current workload',
       category: 'ROUTE',
       icon: <LayoutDashboard size={16} className="text-teal-600" />,
       perform: () => {
@@ -134,7 +138,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     {
       id: 'route-analytics',
       title: 'Executive Analytics & Telemetry',
-      subtitle: 'SLA aging compliance, category volume breakdown, and daily intake trends',
+      subtitle: 'Pending case age bands, category volume breakdown, and daily intake trends',
       category: 'ROUTE',
       icon: <BarChart3 size={16} className="text-teal-600" />,
       perform: () => {
@@ -163,7 +167,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       title: 'Load Synthetic Demo Cases',
       subtitle: isAlreadySeeded
         ? 'Synthetic dataset already initialized in database (32 cases across 8 categories)'
-        : 'Seed 32 realistic CFPB grievances across 8 categories with clock-driven SLA distribution',
+        : 'Seed 32 synthetic CFPB grievances across 8 categories with varied submission ages',
       category: 'ACTION',
       icon: <Database size={16} className={isAlreadySeeded ? 'text-slate-400' : 'text-amber-600'} />,
       disabled: isAlreadySeeded,
@@ -303,7 +307,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                   Confirm Synthetic Telemetry Seeding
                 </p>
                 <p className="text-[11px] text-amber-200/80 mt-0.5">
-                  This action will persist 32 realistic synthetic CFPB complaints with SLA distributions. The operation is idempotent.
+                  This action will persist 32 synthetic CFPB complaints with varied submission ages. The operation is idempotent.
                 </p>
               </div>
             </div>

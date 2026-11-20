@@ -105,7 +105,7 @@ describe('ExecutiveAnalyticsPage', () => {
       expect(screen.getByText(/Grievance Intake & AI Triage Intelligence Hub/i)).toBeInTheDocument();
       expect(screen.getByText(/14-Day Complaint Velocity & Adjudication Trend/i)).toBeInTheDocument();
       expect(screen.getByText(/Volume & Priority Matrix/i)).toBeInTheDocument();
-      expect(screen.getByText(/SLA Queue Aging/i)).toBeInTheDocument();
+      expect(screen.getByText(/Pending Case Age/i)).toBeInTheDocument();
       expect(screen.getByText(/Confidence Calibration Bands/i)).toBeInTheDocument();
       expect(screen.getByText('100')).toBeInTheDocument(); // total
     });
@@ -113,7 +113,7 @@ describe('ExecutiveAnalyticsPage', () => {
     // Check KPIs
     expect(screen.getByText('75%')).toBeInTheDocument(); // automation rate
     expect(screen.getAllByText('40').length).toBeGreaterThan(0); // human reviewed volume
-    expect(screen.getByText('92%')).toBeInTheDocument(); // sla compliance rate
+    expect(screen.getByText('72%')).toBeInTheDocument(); // share of pending cases under 24 hours
 
     // Truthful AI notice
     expect(screen.getByText(/Uncalibrated model probability estimates/i)).toBeInTheDocument();
@@ -293,7 +293,7 @@ describe('ExecutiveAnalyticsPage', () => {
     expect(within(card).getByText(/rejected/i)).toBeInTheDocument();
   });
 
-  it('renders accurate SLA aging breakdown labels reflecting policy thresholds', async () => {
+  it('renders descriptive queue-age bands without claiming configured deadlines', async () => {
     vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValueOnce(sampleAnalytics);
 
     render(
@@ -303,25 +303,21 @@ describe('ExecutiveAnalyticsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/SLA Queue Aging/i)).toBeInTheDocument();
+      expect(screen.getByText(/Pending Case Age/i)).toBeInTheDocument();
     });
 
-    const slaCard = screen.getByText('SLA Queue Aging').closest<HTMLElement>('div.shadow-card')!;
-    // Check column labels and status descriptions
-    expect(within(slaCard).getByText(/≤ 24 Hours/i)).toBeInTheDocument();
-    expect(within(slaCard).getByText('Within Target')).toBeInTheDocument();
-    expect(within(slaCard).getByText(/> 24h – ≤ 72h/i)).toBeInTheDocument();
-    expect(within(slaCard).getByText('Target Overdue / At Risk')).toBeInTheDocument();
-    expect(within(slaCard).getByText(/> 72 Hours/i)).toBeInTheDocument();
-    expect(within(slaCard).getByText('Escalation Breach')).toBeInTheDocument();
-
-    // Check Target badge
-    expect(within(slaCard).getByText(/Target: ≤ 24h/i)).toBeInTheDocument();
-
-    // Check Executive Overview KPI cards 4 & 5
-    expect(screen.getByText(/within target/)).toBeInTheDocument();
-    expect(screen.getByText(/escalation breach/)).toBeInTheDocument();
-    expect(screen.getByText(/target overdue/)).toBeInTheDocument();
+    const ageCard = screen.getByText('Pending Case Age').closest<HTMLElement>('div.shadow-card')!;
+    expect(within(ageCard).getByText(/≤ 24 Hours/i)).toBeInTheDocument();
+    expect(within(ageCard).getByText('Recent')).toBeInTheDocument();
+    expect(within(ageCard).getByText(/> 24h – ≤ 72h/i)).toBeInTheDocument();
+    expect(within(ageCard).getByText('Aging')).toBeInTheDocument();
+    expect(within(ageCard).getByText(/> 72 Hours/i)).toBeInTheDocument();
+    expect(within(ageCard).getByText('Older')).toBeInTheDocument();
+    expect(within(ageCard).getByText('Operational bands')).toBeInTheDocument();
+    expect(ageCard).toHaveTextContent('not legal or contractual deadlines');
+    expect(screen.getByText('Pending Under 24h')).toBeInTheDocument();
+    expect(screen.getByText('Pending Over 24h')).toBeInTheDocument();
+    expect(screen.queryByText(/SLA Queue Aging/i)).not.toBeInTheDocument();
   });
 
   it('renders Straight-Through Automation Rate with explanatory denominator tooltip note', async () => {

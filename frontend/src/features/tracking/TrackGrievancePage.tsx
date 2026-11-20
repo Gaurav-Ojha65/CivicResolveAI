@@ -51,41 +51,20 @@ const STEPS: StepperStep[] = [
   { id: 'resolved', label: 'Resolved', description: 'Final determination' },
 ];
 
-/**
- * Maps the backend grievance status to the active progress step (0-3)
- * via an exhaustive switch over GrievanceStatus.
- */
-function getActiveStepIndex(status: GrievanceStatus): number {
-  switch (status) {
-    case 'PENDING_REVIEW':
-      return 1; // Stage 2 of 4: Auto-Triaged (awaiting human specialist)
-    case 'AUTO_ROUTED':
-      return 1; // Stage 2 of 4: Auto-Triaged (automated routing complete)
-    case 'UNDER_REVIEW':
-      return 2; // Stage 3 of 4: Specialist review (if needed)
-    case 'APPROVED':
-    case 'OVERRIDDEN':
-    case 'REJECTED':
-    case 'DISMISSED':
-      return 3; // Stage 4 of 4: Resolved / Closed
-    default: {
-      const _exhaustiveCheck: never = status;
-      return _exhaustiveCheck;
-    }
-  }
-}
+const STEP_BY_STATUS: Record<GrievanceStatus, number> = {
+  AUTO_ROUTED: 1,
+  PENDING_REVIEW: 2,
+  APPROVED: 3,
+  OVERRIDDEN: 3,
+  REJECTED: 3,
+};
 
 /**
  * Returns the contextual label for the step based on grievance status.
- * For DISMISSED or REJECTED cases, renders "Closed" rather than "Resolved".
+ * Rejected cases display the final step as "Closed".
  */
-function getStepLabel(stepIndex: number, status?: GrievanceStatus): string {
-  if (stepIndex === 3) {
-    if (status === 'DISMISSED' || status === 'REJECTED') {
-      return 'Closed';
-    }
-    return 'Resolved';
-  }
+function getStepLabel(stepIndex: number, status: GrievanceStatus): string {
+  if (stepIndex === 3 && status === 'REJECTED') return 'Closed';
   return STEPS[stepIndex]?.label ?? 'Received';
 }
 
@@ -299,7 +278,7 @@ export const TrackGrievancePage: React.FC = () => {
   };
 
   const activeStepIndex = trackingData
-    ? getActiveStepIndex(trackingData.status)
+    ? (STEP_BY_STATUS[trackingData.status] ?? 0)
     : 0;
 
   return (
@@ -549,8 +528,8 @@ export const TrackGrievancePage: React.FC = () => {
                   const isCompleted = idx < activeStepIndex;
                   const isCurrent = idx === activeStepIndex;
                   const isLast = idx === STEPS.length - 1;
-                  const isDismissed = trackingData.status === 'DISMISSED';
-                  const stepLabel = idx === 3 && (isDismissed || trackingData.status === 'REJECTED') ? 'Closed' : step.label;
+                  const isClosed = trackingData.status === 'REJECTED';
+                  const stepLabel = getStepLabel(idx, trackingData.status);
 
                   return (
                     <li
@@ -586,7 +565,7 @@ export const TrackGrievancePage: React.FC = () => {
                             isCompleted
                               ? 'bg-teal-600 text-white shadow-xs'
                               : isCurrent
-                              ? isDismissed
+                              ? isClosed
                                 ? 'bg-slate-100 text-slate-800 border-2 border-slate-500 ring-4 ring-slate-400/20 shadow-xs'
                                 : 'bg-teal-50 text-teal-700 border-2 border-teal-600 ring-4 ring-teal-500/15 shadow-xs'
                               : 'bg-slate-100 text-slate-500 border border-slate-300'
@@ -603,7 +582,7 @@ export const TrackGrievancePage: React.FC = () => {
                           <span
                             className={`text-xs font-bold ${
                               isCurrent
-                                ? isDismissed
+                                ? isClosed
                                   ? 'text-slate-900 font-extrabold'
                                   : 'text-teal-900 font-extrabold'
                                 : isCompleted
@@ -616,7 +595,7 @@ export const TrackGrievancePage: React.FC = () => {
                           <span
                             className={`text-[11px] font-mono ${
                               isCurrent
-                                ? isDismissed
+                                ? isClosed
                                   ? 'text-slate-600 font-bold'
                                   : 'text-teal-700 font-bold'
                                 : isCompleted
@@ -624,12 +603,12 @@ export const TrackGrievancePage: React.FC = () => {
                                 : 'text-slate-400'
                             }`}
                           >
-                            {isDismissed && idx === 3
+                            {isClosed && isLast
                               ? 'Closed'
-                              : isCompleted
+                              : isCompleted || (isCurrent && isLast)
                               ? 'Complete'
                               : isCurrent
-                              ? 'In Progress'
+                              ? trackingData.status === 'PENDING_REVIEW' ? 'Awaiting review' : 'Complete'
                               : 'Pending'}
                           </span>
                         </div>

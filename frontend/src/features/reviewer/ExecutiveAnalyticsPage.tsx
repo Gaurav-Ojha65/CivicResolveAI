@@ -133,9 +133,10 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
     return Math.round((data.autoRoutingEfficiencyRate || 0) * 100);
   }, [data]);
 
-  const slaPct = useMemo(() => {
-    if (!data) return 100;
-    return Math.round((data.slaComplianceRate || 0) * 100);
+  const recentPendingPct = useMemo(() => {
+    const aging = data?.slaAgingBreakdown;
+    if (!aging || aging.totalPending <= 0) return 0;
+    return Math.round(((aging.onTrack || 0) / aging.totalPending) * 100);
   }, [data]);
 
   const humanReviewedCount = useMemo(() => {
@@ -154,7 +155,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
     return data?.statusDistribution?.REJECTED ?? 0;
   }, [data]);
 
-  const totalAtRiskOrBreached = useMemo(() => {
+  const pendingOver24Hours = useMemo(() => {
     if (!data?.slaAgingBreakdown) return 0;
     return (data.slaAgingBreakdown.atRisk || 0) + (data.slaAgingBreakdown.breached || 0);
   }, [data]);
@@ -218,7 +219,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
   return (
     <ReviewerLayout
       title="Executive Operations & Analytics"
-      subtitle="Operational telemetry, triage automation velocity, SLA health, and calibration distribution"
+      subtitle="Operational telemetry, triage automation velocity, queue age, and calibration distribution"
       onRefresh={fetchTelemetry}
       isRefreshing={loading}
     >
@@ -403,11 +404,11 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Metric 4: SLA Compliance Rate */}
+            {/* Metric 4: share of pending cases in the youngest reporting band */}
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                  SLA Compliance
+                  Pending Under 24h
                 </span>
                 <div className="p-1.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
                   <Clock size={14} />
@@ -416,36 +417,36 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               <div className="mt-2.5">
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
-                    {slaPct}%
+                    {recentPendingPct}%
                   </span>
                   <span className="text-[11px] text-purple-700 font-semibold font-mono">
-                    &le;24h
+                    age band
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-600">
-                  <span className="font-semibold tabular-nums">{data?.slaAgingBreakdown?.onTrack ?? 0}</span> within target
+                  <span className="font-semibold tabular-nums">{data?.slaAgingBreakdown?.onTrack ?? 0}</span> recent pending cases
                 </p>
               </div>
             </div>
 
-            {/* Metric 5: SLA Risk & Backlog Escalation */}
+            {/* Metric 5: older pending-case reporting bands */}
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                  Queue At-Risk
+                  Pending Over 24h
                 </span>
-                <div className={`p-1.5 rounded-md border ${totalAtRiskOrBreached > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                <div className={`p-1.5 rounded-md border ${pendingOver24Hours > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
                   <AlertTriangle size={14} />
                 </div>
               </div>
               <div className="mt-2.5">
                 <div className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
-                  {totalAtRiskOrBreached}
+                  {pendingOver24Hours}
                 </div>
                 <p className="mt-1 text-[11px] text-slate-600 flex flex-wrap items-center gap-1">
-                  <span className="font-semibold text-red-700 tabular-nums">{data?.slaAgingBreakdown?.breached ?? 0}</span> escalation breach
+                  <span className="font-semibold text-red-700 tabular-nums">{data?.slaAgingBreakdown?.breached ?? 0}</span> over 72h
                   <span className="text-slate-400">•</span>
-                  <span className="font-semibold text-amber-700 tabular-nums">{data?.slaAgingBreakdown?.atRisk ?? 0}</span> target overdue
+                  <span className="font-semibold text-amber-700 tabular-nums">{data?.slaAgingBreakdown?.atRisk ?? 0}</span> 24 to 72h
                 </p>
               </div>
             </div>
@@ -858,22 +859,22 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right: SLA Queue Health & Confidence Calibration (1 col) */}
+          {/* Right: pending queue age and confidence calibration (1 col) */}
           <div className="space-y-6">
-            {/* SLA Health Card */}
+            {/* Operational age bands. These are descriptive, not policy deadlines. */}
             <div className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Clock size={18} className="text-teal-700" />
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
-                    SLA Queue Aging
+                    Pending Case Age
                   </h3>
                   <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
                     Point-in-Time Snapshot
                   </span>
                 </div>
                 <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Target: &le; 24h
+                  Operational bands
                 </span>
               </div>
 
@@ -883,7 +884,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <span className="text-xl font-bold text-emerald-900 mt-1 block font-mono tabular-nums">
                     {data?.slaAgingBreakdown.onTrack ?? 0}
                   </span>
-                  <span className="text-xs text-emerald-800 font-medium">Within Target</span>
+                  <span className="text-xs text-emerald-800 font-medium">Recent</span>
                 </div>
 
                 <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200">
@@ -891,7 +892,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <span className="text-xl font-bold text-amber-900 mt-1 block font-mono tabular-nums">
                     {data?.slaAgingBreakdown.atRisk ?? 0}
                   </span>
-                  <span className="text-xs text-amber-800 font-medium">Target Overdue / At Risk</span>
+                  <span className="text-xs text-amber-800 font-medium">Aging</span>
                 </div>
 
                 <div className="p-3 rounded-lg bg-red-50/70 border border-red-200">
@@ -899,12 +900,12 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <span className="text-xl font-bold text-red-900 mt-1 block font-mono tabular-nums">
                     {data?.slaAgingBreakdown.breached ?? 0}
                   </span>
-                  <span className="text-xs text-red-800 font-medium">Escalation Breach</span>
+                  <span className="text-xs text-red-800 font-medium">Older</span>
                 </div>
               </div>
 
               <p className="text-xs text-slate-600 pt-1">
-                Aging calculated dynamically against pending review cases ({data?.slaAgingBreakdown.totalPending ?? 0} pending). Cases exceeding 72 hours trigger escalation alerts.
+                Fixed 24 and 72 hour bands describe the age of pending cases ({data?.slaAgingBreakdown.totalPending ?? 0} pending). They are operational reporting bands, not legal or contractual deadlines.
               </p>
             </div>
 
@@ -1045,7 +1046,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 Capacity Stress Lab &amp; AI Threshold Forecasting
               </h2>
               <p className="text-xs text-slate-600">
-                Stochastic operational queue projection modeling surge scenarios, staffing elasticity, and statutory review policy frontiers.
+                Stochastic operational queue projection modeling surge scenarios, staffing assumptions, and configurable routing thresholds.
               </p>
             </div>
             <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">

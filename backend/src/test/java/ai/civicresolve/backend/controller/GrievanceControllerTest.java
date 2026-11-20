@@ -1,5 +1,6 @@
 package ai.civicresolve.backend.controller;
 
+import ai.civicresolve.backend.dto.ActiveLearningRecord;
 import ai.civicresolve.backend.dto.ConsumerTimelineEvent;
 import ai.civicresolve.backend.dto.ExecutiveAnalyticsResponse;
 import ai.civicresolve.backend.dto.GrievanceDetailResponse;
@@ -14,6 +15,7 @@ import ai.civicresolve.backend.dto.ReviewRequest;
 import ai.civicresolve.backend.entity.GrievanceStatus;
 import ai.civicresolve.backend.entity.TriagePriority;
 import ai.civicresolve.backend.exception.GlobalExceptionHandler;
+import ai.civicresolve.backend.exception.InvalidPaginationException;
 import ai.civicresolve.backend.exception.InvalidTrackingSecretFormatException;
 import ai.civicresolve.backend.exception.RateLimitExceededException;
 import ai.civicresolve.backend.exception.StaleGrievanceVersionException;
@@ -27,6 +29,8 @@ import jakarta.persistence.OptimisticLockException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -452,6 +456,78 @@ class GrievanceControllerTest {
                 .andExpect(jsonPath("$.content[0].id").value(GRIEVANCE_ID.toString()))
                 .andExpect(jsonPath("$.content[0].assignedCategory").value("Credit card"))
                 .andExpect(jsonPath("$.content[0].narrative").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances with negative page returns validation ProblemDetail")
+    void listGrievances_negativePage_returns400ProblemDetail() throws Exception {
+        given(grievanceService.list(
+                eq(GrievanceStatus.PENDING_REVIEW),
+                eq(TriagePriority.HIGH),
+                eq("Credit card"),
+                eq(-1),
+                eq(20)))
+                .willThrow(new InvalidPaginationException("Page index must be zero or greater."));
+
+        mockMvc.perform(get("/api/grievances")
+                        .param("status", "PENDING_REVIEW")
+                        .param("priority", "HIGH")
+                        .param("category", "Credit card")
+                        .param("page", "-1")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid Pagination"))
+                .andExpect(jsonPath("$.detail").value("Page index must be zero or greater."));
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances with zero page size returns validation ProblemDetail")
+    void listGrievances_zeroSize_returns400ProblemDetail() throws Exception {
+        given(grievanceService.list(
+                eq(GrievanceStatus.PENDING_REVIEW),
+                eq(TriagePriority.HIGH),
+                eq("Credit card"),
+                eq(0),
+                eq(0)))
+                .willThrow(new InvalidPaginationException("Page size must be greater than zero."));
+
+        mockMvc.perform(get("/api/grievances")
+                        .param("status", "PENDING_REVIEW")
+                        .param("priority", "HIGH")
+                        .param("category", "Credit card")
+                        .param("size", "0")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid Pagination"))
+                .andExpect(jsonPath("$.detail").value("Page size must be greater than zero."));
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances with nonnumeric page returns safe validation ProblemDetail")
+    void listGrievances_malformedPage_returns400ProblemDetail() throws Exception {
+        mockMvc.perform(get("/api/grievances")
+                        .param("page", "not-a-number")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid Request Parameter"))
+                .andExpect(jsonPath("$.detail").value("Request parameter 'page' has an invalid value."))
+                .andExpect(content().string(not(containsString("not-a-number"))));
+    }
+
+    @Test
+    @DisplayName("GET /api/grievances with unknown status returns safe validation ProblemDetail")
+    void listGrievances_invalidStatus_returns400ProblemDetail() throws Exception {
+        mockMvc.perform(get("/api/grievances")
+                        .param("status", "UNKNOWN_STATUS")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid Request Parameter"))
+                .andExpect(jsonPath("$.detail").value("Request parameter 'status' has an invalid value."))
+                .andExpect(content().string(not(containsString("UNKNOWN_STATUS"))));
     }
 
     @Test
@@ -1334,16 +1410,39 @@ class GrievanceControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/grievances/analytics/calibration preserves upstream 404")
+    void getCalibrationMissingArtifactReturns404() throws Exception {
+        given(grievanceService.getCalibrationMetrics())
+                .willThrow(new NlpClientService.NlpClientException(404, "Calibration artifact was not found."));
+
+        mockMvc.perform(get("/api/grievances/analytics/calibration")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("NLP Service Error"))
+                .andExpect(jsonPath("$.detail").value("Calibration artifact was not found."));
+    }
+
+    @Test
     @DisplayName("GET /api/grievances/analytics/active-learning-export unauthenticated → 401")
     void activeLearningExportUnauthenticated() throws Exception {
-        mockMvc.perform(get("/api/grievances/analytics/active-learning-export"))
+        mockMvc.perform(get("/api/grievances/analytics/active-learning-export").param("format", "csv"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void activeLearningCsvExportRequiresReviewerRole() throws Exception {
+        mockMvc.perform(get("/api/grievances/analytics/active-learning-export")
+                        .param("format", "csv")
+                        .with(user("citizen").roles("CITIZEN")))
+                .andExpect(status().isForbidden());
+        verify(grievanceService, never()).exportActiveLearning(false);
     }
 
     @Test
     @DisplayName("GET /api/grievances/analytics/active-learning-export as REVIEWER (manifest format) → 200")
     void activeLearningExportManifest() throws Exception {
-        ai.civicresolve.backend.dto.ActiveLearningRecord record = new ai.civicresolve.backend.dto.ActiveLearningRecord(
+        ActiveLearningRecord record = new ActiveLearningRecord(
                 UUID.randomUUID(),
                 "Masked narrative text with [SSN-REDACTED]",
                 "Credit card",
@@ -1368,9 +1467,9 @@ class GrievanceControllerTest {
     @Test
     @DisplayName("GET /api/grievances/analytics/active-learning-export as REVIEWER (jsonl format) → 200 with SHA header")
     void activeLearningExportJsonl() throws Exception {
-        ai.civicresolve.backend.dto.ActiveLearningRecord record = new ai.civicresolve.backend.dto.ActiveLearningRecord(
+        ActiveLearningRecord record = new ActiveLearningRecord(
                 UUID.randomUUID(),
-                "Masked narrative text",
+                "=Original masked narrative",
                 "Mortgage",
                 "Mortgage",
                 "APPROVED",
@@ -1386,15 +1485,16 @@ class GrievanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().exists("X-Export-SHA256"))
                 .andExpect(header().string("X-Export-Record-Count", "1"))
-                .andExpect(header().string("X-Export-Override-Count", "0"));
+                .andExpect(header().string("X-Export-Override-Count", "0"))
+                .andExpect(content().string(containsString("\"maskedNarrative\":\"=Original masked narrative\"")));
     }
 
     @Test
     @DisplayName("GET /api/grievances/analytics/active-learning-export as REVIEWER (csv format) → 200 with CSV content")
     void activeLearningExportCsv() throws Exception {
-        ai.civicresolve.backend.dto.ActiveLearningRecord record = new ai.civicresolve.backend.dto.ActiveLearningRecord(
+        ActiveLearningRecord record = new ActiveLearningRecord(
                 UUID.randomUUID(),
-                "Masked narrative text with, commas and \"quotes\"",
+                "  Masked narrative with, commas and \"quotes\"\r\nSecond line",
                 "Credit card",
                 "Credit card",
                 "APPROVED",
@@ -1410,7 +1510,28 @@ class GrievanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().exists("X-Export-SHA256"))
                 .andExpect(header().string("Content-Type", "text/csv; charset=UTF-8"))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("masked_narrative")));
+                .andExpect(content().string(containsString("masked_narrative")))
+                .andExpect(content().string(containsString(",\"  Masked narrative with, commas and \"\"quotes\"\"\r\nSecond line\"\n")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "=text", "+text", "-text", "@text", "  =text", "\ttext", "\rtext", "\ntext",
+            " \t+text", "\u00A0-text", "\uFEFF@text", "\u0001=text", "＝text", "＋text", "－text", "＠text"
+    })
+    @DisplayName("CSV writes spreadsheet-sensitive prefixes as text")
+    void activeLearningCsvExportNeutralizesFormulaPrefixes(String narrative) throws Exception {
+        ActiveLearningRecord record = new ActiveLearningRecord(
+                GRIEVANCE_ID, narrative, "Credit card", "Credit card", "APPROVED", "LOW", false,
+                Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-11-02T00:00:00Z")
+        );
+        given(grievanceService.exportActiveLearning(false)).willReturn(List.of(record));
+
+        mockMvc.perform(get("/api/grievances/analytics/active-learning-export")
+                        .param("format", "csv")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(",\"'" + narrative + "\"\n")));
     }
 
     @Test
@@ -1478,5 +1599,21 @@ class GrievanceControllerTest {
                 .andExpect(jsonPath("$.status").value("success"))
                 .andExpect(jsonPath("$.recordsCreated").value(32))
                 .andExpect(jsonPath("$.alreadySeeded").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/grievances/analytics/seed-demo preserves service ResponseStatusException")
+    void seedDemoData_disabled_preserves403() throws Exception {
+        given(grievanceService.seedRealisticDemoTelemetry(true))
+                .willThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN,
+                        "Synthetic demo data seeding is disabled in this environment."));
+
+        mockMvc.perform(post("/api/grievances/analytics/seed-demo?confirm=true")
+                        .with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Forbidden"))
+                .andExpect(jsonPath("$.detail").value("Synthetic demo data seeding is disabled in this environment."));
     }
 }

@@ -160,11 +160,11 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
     expect(screen.getAllByText('12345678...').length).toBe(1);
     expect(screen.getAllByText('87654321...').length).toBe(1);
 
-    // Exactly one review link per complaint (ordered by SLA breach urgency: MOCK_GRIEVANCE_2 first, MOCK_GRIEVANCE_1 second)
+    // Exactly one review link per complaint, preserving the backend order.
     const reviewLinks = screen.getAllByRole('link', { name: /^review$/i });
     expect(reviewLinks.length).toBe(2);
-    expect(reviewLinks[0]).toHaveAttribute('href', '/reviewer/grievances/87654321-dcba-4321-dcba-ba0987654321');
-    expect(reviewLinks[1]).toHaveAttribute('href', '/reviewer/grievances/12345678-abcd-1234-abcd-1234567890ab');
+    expect(reviewLinks[0]).toHaveAttribute('href', '/reviewer/grievances/12345678-abcd-1234-abcd-1234567890ab');
+    expect(reviewLinks[1]).toHaveAttribute('href', '/reviewer/grievances/87654321-dcba-4321-dcba-ba0987654321');
   });
 
   it('applies responsive CSS classes for desktop table layout (md:table, md:table-row, md:table-cell)', async () => {
@@ -218,7 +218,7 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
     expect(cells[2]!.className).toContain('order-2');
     expect(cells[2]!.className).toContain('col-span-1');
 
-    // Time to SLA (left of row 3 on mobile)
+    // Case age (left of row 3 on mobile)
     expect(cells[3]!.className).toContain('order-4');
 
     // Models (left of bottom action row on mobile)
@@ -267,9 +267,9 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
       expect(screen.getByTestId('queue-table')).toBeInTheDocument();
     });
 
-    // MOCK_GRIEVANCE_2 breaches earlier, so it is sorted to index 0. MOCK_GRIEVANCE_1 is index 1.
-    const row0 = screen.getByTestId('queue-row-87654321-dcba-4321-dcba-ba0987654321');
-    const row1 = screen.getByTestId('queue-row-12345678-abcd-1234-abcd-1234567890ab');
+    // Keyboard selection follows the stable order returned by the backend.
+    const row0 = screen.getByTestId('queue-row-12345678-abcd-1234-abcd-1234567890ab');
+    const row1 = screen.getByTestId('queue-row-87654321-dcba-4321-dcba-ba0987654321');
 
     // Initial selected row is row0
     expect(row0.className).toContain('ring-teal-500');
@@ -292,7 +292,7 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('quick-peek-content')).toBeInTheDocument();
     });
-    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('12345678-abcd-1234-abcd-1234567890ab');
+    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('87654321-dcba-4321-dcba-ba0987654321');
 
     // Escape closes Quick Peek drawer
     fireEvent.keyDown(window, { key: 'Escape' });

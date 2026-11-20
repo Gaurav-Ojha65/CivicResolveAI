@@ -55,8 +55,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -953,6 +956,49 @@ class PostgresIntegrationIT {
 
     @Test
     @Transactional
+    @DisplayName("Queue search applies all filters before paging, with stable order and matching totals")
+    void searchesAndPaginatesTheWholeQueue() throws Exception {
+        String category = "Student loan";
+        Instant newest = Instant.parse("2026-11-12T10:00:00Z");
+        Grievance firstAtSameTime = createQueueCase(category, TriagePriority.HIGH, GrievanceStatus.PENDING_REVIEW, newest);
+        Grievance secondAtSameTime = createQueueCase(category, TriagePriority.HIGH, GrievanceStatus.PENDING_REVIEW, newest);
+        Grievance older = createQueueCase(category, TriagePriority.HIGH, GrievanceStatus.PENDING_REVIEW, newest.minusSeconds(60));
+        createQueueCase(category, TriagePriority.HIGH, GrievanceStatus.APPROVED, newest);
+        createQueueCase(category, TriagePriority.MEDIUM, GrievanceStatus.PENDING_REVIEW, newest);
+        createQueueCase("Credit card", TriagePriority.HIGH, GrievanceStatus.PENDING_REVIEW, newest);
+        List<String> tiedIds = List.of(firstAtSameTime.getId().toString(), secondAtSameTime.getId().toString())
+                .stream().sorted(Comparator.reverseOrder()).toList();
+
+        mockMvc.perform(get("/api/grievances").with(user("reviewer").roles("REVIEWER"))
+                        .param("status", "PENDING_REVIEW").param("priority", "HIGH")
+                        .param("search", "  TuDeNt  ").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(tiedIds.get(0)))
+                .andExpect(jsonPath("$.content[1].id").value(tiedIds.get(1)));
+
+        mockMvc.perform(get("/api/grievances").with(user("reviewer").roles("REVIEWER"))
+                        .param("status", "PENDING_REVIEW").param("priority", "HIGH").param("category", category)
+                        .param("search", "student").param("size", "2").param("page", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(older.getId().toString()));
+
+        mockMvc.perform(get("/api/grievances").with(user("reviewer").roles("REVIEWER"))
+                        .param("search", older.getId().toString().substring(0, 18).toUpperCase(Locale.ROOT)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(older.getId().toString()));
+
+        mockMvc.perform(get("/api/grievances").with(user("reviewer").roles("REVIEWER")).param("search", "%"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @Transactional
     @DisplayName("Prediction: JSONB probabilities persist and retrieve with all 8 keys")
     void predictionJsonbProbabilities() {
         Grievance g = createGrievance();
@@ -989,6 +1035,28 @@ class PostgresIntegrationIT {
         assertThat(found).isPresent();
         assertThat(found.get().getSentimentScore()).isCloseTo(-0.75, org.assertj.core.data.Offset.offset(0.001));
         assertThat(found.get().getSentimentLabel()).isEqualTo("NEGATIVE");
+    }
+
+    @Test
+    @Transactional
+    @DisplayName("Executive analytics counts only recorded, recognized sentiment labels")
+    void executiveAnalyticsCountsPersistedSentiment() throws Exception {
+        var before = grievanceService.getExecutiveAnalytics().confidenceSentimentBuckets();
+        createPrediction(createGrievance(), -0.75, "NEGATIVE");
+        createPrediction(createGrievance(), 0.0, "NEUTRAL");
+        createPrediction(createGrievance(), 0.6, "POSITIVE");
+        createPrediction(createGrievance(), 0.8, "POSITIVE");
+        createPrediction(createGrievance(), null, null);
+        createPrediction(createGrievance(), null, "UNKNOWN");
+        createGrievance(); // A grievance without a prediction has no sentiment label.
+        entityManager.flush();
+
+        mockMvc.perform(get("/api/grievances/analytics/overview").with(user("reviewer").roles("REVIEWER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confidenceSentimentBuckets.negativeSentiment").value(before.negativeSentiment() + 1))
+                .andExpect(jsonPath("$.confidenceSentimentBuckets.neutralSentiment").value(before.neutralSentiment() + 1))
+                .andExpect(jsonPath("$.confidenceSentimentBuckets.positiveSentiment").value(before.positiveSentiment() + 2))
+                .andExpect(jsonPath("$.confidenceSentimentBuckets.confidence75To90").value(before.confidence75To90() + 6));
     }
 
     @Test
@@ -1578,7 +1646,18 @@ class PostgresIntegrationIT {
         return grievanceRepository.save(g);
     }
 
+    private Grievance createQueueCase(String category, TriagePriority priority, GrievanceStatus status, Instant submittedAt) {
+        Grievance grievance = new Grievance("Queue fixture for search and pagination integration testing.",
+                category, priority, status, status == GrievanceStatus.PENDING_REVIEW);
+        grievance.setSubmittedAt(submittedAt);
+        return grievanceRepository.save(grievance);
+    }
+
     private Prediction createPrediction(Grievance g) {
+        return createPrediction(g, -0.75, "NEGATIVE");
+    }
+
+    private Prediction createPrediction(Grievance g, Double sentimentScore, String sentimentLabel) {
         Prediction p = new Prediction(
                 g,
                 "Credit card",
@@ -1591,8 +1670,8 @@ class PostgresIntegrationIT {
                 List.of("HIGH priority requires human review."),
                 "HIGH",
                 List.of("Keyword: repossession detected."),
-                -0.75,
-                "NEGATIVE"
+                sentimentScore,
+                sentimentLabel
         );
         return predictionRepository.save(p);
     }

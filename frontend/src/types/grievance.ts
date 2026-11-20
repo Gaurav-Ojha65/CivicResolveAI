@@ -8,11 +8,9 @@ export type TriagePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type GrievanceStatus =
   | 'PENDING_REVIEW'
   | 'AUTO_ROUTED'
-  | 'UNDER_REVIEW'
   | 'APPROVED'
   | 'OVERRIDDEN'
-  | 'REJECTED'
-  | 'DISMISSED';
+  | 'REJECTED';
 
 export type ReviewAction = 'APPROVE' | 'OVERRIDE' | 'REJECT';
 

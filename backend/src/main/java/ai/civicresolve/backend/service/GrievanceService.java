@@ -22,6 +22,7 @@ import ai.civicresolve.backend.entity.GrievanceStatus;
 import ai.civicresolve.backend.entity.Prediction;
 import ai.civicresolve.backend.entity.TriagePriority;
 import ai.civicresolve.backend.exception.GrievanceNotFoundException;
+import ai.civicresolve.backend.exception.InvalidPaginationException;
 import ai.civicresolve.backend.exception.InvalidReviewStateException;
 import ai.civicresolve.backend.exception.StaleGrievanceVersionException;
 import ai.civicresolve.backend.repository.AuditLogRepository;
@@ -67,6 +68,7 @@ import java.util.UUID;
 public class GrievanceService {
 
     private static final Logger log = LoggerFactory.getLogger(GrievanceService.class);
+    private static final int MAX_PAGE_SIZE = 100;
 
     // Set of terminal states that cannot transition further
     private static final Set<GrievanceStatus> TERMINAL_STATES = Set.of(
@@ -155,8 +157,7 @@ public class GrievanceService {
                                         String search,
                                         int page,
                                         int size) {
-        int safeSize = Math.min(size, 100);
-        Pageable pageable = PageRequest.of(page, safeSize);
+        Pageable pageable = createPageRequest(page, size);
         String safeSearch = (search != null && !search.isBlank()) ? search.trim() : null;
         if (safeSearch != null) {
             return grievanceRepository.findAll(status, priority, category, safeSearch, pageable)
@@ -172,8 +173,7 @@ public class GrievanceService {
                                         String category,
                                         int page,
                                         int size) {
-        int safeSize = Math.min(size, 100);
-        Pageable pageable = PageRequest.of(page, safeSize);
+        Pageable pageable = createPageRequest(page, size);
         return grievanceRepository.findAll(status, priority, category, pageable)
                 .map(GrievanceResponse::from);
     }
@@ -385,7 +385,7 @@ public class GrievanceService {
     /**
      * Aggregated operational telemetry and executive analytics.
      * Computes priority distribution, workflow matrix, confidence calibration bands,
-     * daily intake trends, and queue SLA aging directly via database-level projections.
+     * daily intake trends, and fixed pending-case age bands directly via database-level projections.
      */
     public ExecutiveAnalyticsResponse getExecutiveAnalytics() {
         long total = grievanceRepository.count();
@@ -432,30 +432,21 @@ public class GrievanceService {
             }
         }
 
-        // Confidence and margin bands
-        PredictionRepository.ConfidenceMarginBandsProjection bands =
-                predictionRepository.countConfidenceMarginBands();
-        long cUnder55 = bands != null ? bands.getConfidenceUnder55() : 0L;
-        long c55To75 = bands != null ? bands.getConfidence55To75() : 0L;
-        long c75To90 = bands != null ? bands.getConfidence75To90() : 0L;
-        long cOver90 = bands != null ? bands.getConfidenceOver90() : 0L;
-        long narrowMargin = bands != null ? bands.getNarrowMarginCount() : 0L;
-        long clearMargin = bands != null ? bands.getClearMarginCount() : 0L;
-
+        PredictionRepository.AnalyticsBuckets buckets = predictionRepository.countAnalyticsBuckets();
         ExecutiveAnalyticsResponse.ConfidenceSentimentBuckets confSentiment =
                 new ExecutiveAnalyticsResponse.ConfidenceSentimentBuckets(
-                        cUnder55,
-                        c55To75,
-                        c75To90,
-                        cOver90,
-                        narrowMargin,
-                        clearMargin,
-                        Math.max(0L, (long) (total * 0.72)),
-                        Math.max(0L, (long) (total * 0.22)),
-                        Math.max(0L, (long) (total * 0.06))
+                        buckets.getConfidenceUnder55(),
+                        buckets.getConfidence55To75(),
+                        buckets.getConfidence75To90(),
+                        buckets.getConfidenceOver90(),
+                        buckets.getNarrowMarginCount(),
+                        buckets.getClearMarginCount(),
+                        buckets.getNegativeSentiment(),
+                        buckets.getNeutralSentiment(),
+                        buckets.getPositiveSentiment()
                 );
 
-        // SLA Aging (pending cases: <24h on track, 24-72h at risk, >72h breached)
+        // Fixed operational age bands. These are descriptive, not legal or configured deadlines.
         Instant now = clock.instant();
         Instant twentyFourHoursAgo = now.minus(Duration.ofHours(24));
         Instant seventyTwoHoursAgo = now.minus(Duration.ofHours(72));
@@ -689,6 +680,20 @@ public class GrievanceService {
     private static final java.util.regex.Pattern CARD_PATTERN = java.util.regex.Pattern.compile("\\b(?:\\d{4}[ -]?){3}\\d{4}\\b");
     private static final java.util.regex.Pattern EMAIL_PATTERN = java.util.regex.Pattern.compile("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b");
     private static final java.util.regex.Pattern PHONE_PATTERN = java.util.regex.Pattern.compile("\\b(?:\\+?1[-. ]?)?\\(?\\d{3}\\)?[-. ]?\\d{3}[-. ]?\\d{4}\\b");
+
+    private static Pageable createPageRequest(int page, int size) {
+        if (page < 0) {
+            throw new InvalidPaginationException("Page index must be zero or greater.");
+        }
+        if (size <= 0) {
+            throw new InvalidPaginationException("Page size must be greater than zero.");
+        }
+        int pageSize = Math.min(size, MAX_PAGE_SIZE);
+        if ((long) page * pageSize > Integer.MAX_VALUE) {
+            throw new InvalidPaginationException("Page index and size exceed the supported offset.");
+        }
+        return PageRequest.of(page, pageSize);
+    }
 
     public static String maskPii(String text) {
         if (text == null || text.isBlank()) {

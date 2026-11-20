@@ -346,7 +346,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
               STOCHASTIC MONTE CARLO SIMULATION • SEEDED PRNG (1,000 RUNS)
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-amber-50 text-amber-900 border border-amber-300">
-              Synthetic Simulation (5,000 runs)
+              Synthetic capacity model
             </span>
             <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-line">
               Discrete Integer Queue Physics
@@ -652,7 +652,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
           </div>
         </div>
 
-        {/* Card 4: 72h SLA Breach Probability */}
+        {/* Card 4: three-day capacity exceedance probability */}
         <div
           className={`p-5 rounded-[10px] border shadow-card space-y-2 ${
             isBreachElevated
@@ -664,7 +664,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
-              72h SLA Breach Risk
+              Three-day Capacity Exceedance
             </span>
             <div
               className={`p-2 rounded-lg ${
@@ -699,11 +699,11 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                     : 'bg-emerald-100 text-emerald-800'
               }`}
             >
-              {isBreachElevated ? 'Elevated' : isBreachModerate ? 'Moderate' : 'Low Risk'}
+              {isBreachElevated ? 'Elevated' : isBreachModerate ? 'Moderate' : 'Low'}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs pt-1">
-            <span className="text-slate-600">24h At-Risk Rate:</span>
+            <span className="text-slate-600">Daily Capacity Exceedance:</span>
             <span className="font-mono font-bold text-amber-800 tabular-nums">
               {summary.atRiskProbabilityPercent.toFixed(1)}%
             </span>
@@ -723,7 +723,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
               <div className="flex items-center gap-2">
                 <TrendingUp size={16} className="text-teal-700" />
                 <h3 className="text-sm font-bold text-ink tracking-wide">
-                  14-Day Stochastic Backlog &amp; SLA Capacity Fan Chart
+                  14-Day Stochastic Backlog Capacity Fan Chart
                 </h3>
               </div>
               <p className="text-xs text-slate-600">
@@ -737,11 +737,11 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-0.5 border-t border-dashed border-amber-500 inline-block"></span>
-                <span className="text-slate-700">24h Capacity</span>
+                <span className="text-slate-700">Daily Capacity</span>
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-0.5 border-t border-dashed border-red-500 inline-block"></span>
-                <span className="text-slate-700">72h Breach</span>
+                <span className="text-slate-700">Three-day Capacity</span>
               </span>
             </div>
           </div>
@@ -819,7 +819,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                 );
               })}
 
-              {/* Threshold Line 1: 24h Daily Clearance Capacity (mu) */}
+              {/* Threshold line 1: daily clearance capacity (mu) */}
               {summary.dailyClearanceCapacity <= maxFanBacklog && (
                 <g>
                   <line
@@ -839,12 +839,12 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                     fontFamily="monospace"
                     textAnchor="end"
                   >
-                    24h Capacity (μ = {summary.dailyClearanceCapacity})
+                    Daily Capacity (μ = {summary.dailyClearanceCapacity})
                   </text>
                 </g>
               )}
 
-              {/* Threshold Line 2: 72h SLA Breach Capacity (3 * mu) */}
+              {/* Threshold line 2: three-day clearance capacity (3 * mu) */}
               {summary.breachCapacityThreshold <= maxFanBacklog && (
                 <g>
                   <line
@@ -864,7 +864,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                     fontFamily="monospace"
                     textAnchor="end"
                   >
-                    72h Breach Limit (3μ = {summary.breachCapacityThreshold})
+                    Three-day Capacity (3μ = {summary.breachCapacityThreshold})
                   </text>
                 </g>
               )}
@@ -1099,19 +1099,19 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
               </svg>
             </div>
 
-            {/* SLA Zone Legend */}
+            {/* Capacity zone legend */}
             <div className="grid grid-cols-3 gap-1 pt-2 border-t border-line text-xs text-center font-mono">
               <div className="flex items-center justify-center gap-1 text-emerald-800 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                <span>&lt;24h Safe</span>
+                <span>&le; Daily Capacity</span>
               </div>
               <div className="flex items-center justify-center gap-1 text-amber-800 font-medium">
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span>24–72h Risk</span>
+                <span>1–3× Daily Capacity</span>
               </div>
               <div className="flex items-center justify-center gap-1 text-red-800 font-medium">
                 <span className="w-2 h-2 rounded-full bg-red-600"></span>
-                <span>&gt;72h Breach</span>
+                <span>&gt; 3× Daily Capacity</span>
               </div>
             </div>
           </div>
@@ -1181,7 +1181,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                 {/* Curve 1: Auto-Routing % (Teal) */}
                 <path d={autoRouteCurvePath} fill="none" stroke="#0D9488" strokeWidth="2.5" />
 
-                {/* Curve 2: 72h SLA Breach Risk % (Rose) */}
+                {/* Curve 2: three-day capacity exceedance % (rose) */}
                 <path d={breachCurvePath} fill="none" stroke="#DC2626" strokeWidth="2" strokeDasharray="3 2" />
 
                 {/* Data Points */}
@@ -1213,7 +1213,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                         onMouseLeave={() => setHoveredFrontierGate(null)}
                         className="cursor-pointer"
                       >
-                        <title>{`τ=${pt.confidenceGate}: ${pt.slaBreachProbabilityPercent}% Breach Risk`}</title>
+                        <title>{`τ=${pt.confidenceGate}: ${pt.slaBreachProbabilityPercent}% Capacity Exceedance`}</title>
                       </circle>
                     </g>
                   );
@@ -1245,7 +1245,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
               </span>
               <span className="flex items-center gap-1.5 text-red-800 font-medium">
                 <span className="w-2.5 h-0.5 border-t border-dashed border-red-500 inline-block"></span>
-                <span>72h Breach Risk %</span>
+                <span>Three-day Capacity Exceedance %</span>
               </span>
             </div>
           </div>
