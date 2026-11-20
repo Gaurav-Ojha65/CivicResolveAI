@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ExecutiveAnalyticsPage } from '../../../src/features/reviewer/ExecutiveAnalyticsPage';
@@ -119,7 +119,7 @@ describe('ExecutiveAnalyticsPage', () => {
     expect(screen.getByText(/Uncalibrated model probability estimates/i)).toBeInTheDocument();
   });
 
-  it('calls seedDemoTelemetry when seed button is clicked', async () => {
+  it('calls seedDemoTelemetry when seed button and confirmation dialog are confirmed', async () => {
     vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValue(sampleAnalytics);
     vi.mocked(endpoints.seedDemoTelemetry).mockResolvedValueOnce({
       message: 'Successfully seeded 32 complaints',
@@ -139,10 +139,106 @@ describe('ExecutiveAnalyticsPage', () => {
 
     fireEvent.click(screen.getByText(/Seed Realistic CFPB Demo/i));
 
+    // Explicit confirmation modal must appear
+    const confirmDialog = await screen.findByRole('dialog', { name: /confirm synthetic demo seeding/i });
+    expect(confirmDialog).toBeInTheDocument();
+    expect(screen.getByText(/Idempotent Batch Operation/i)).toBeInTheDocument();
+
+    // Click confirm button
+    const confirmBtn = screen.getByRole('button', { name: /confirm & seed demo data/i });
+    fireEvent.click(confirmBtn);
+
     await waitFor(() => {
       expect(endpoints.seedDemoTelemetry).toHaveBeenCalledTimes(1);
       expect(screen.getByText(/Successfully seeded 32 complaints/i)).toBeInTheDocument();
     });
+  });
+
+  it('cancels seeding without calling API when Cancel is clicked in confirmation dialog', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValue(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Seed Realistic CFPB Demo/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText(/Seed Realistic CFPB Demo/i));
+
+    const confirmDialog = await screen.findByRole('dialog', { name: /confirm synthetic demo seeding/i });
+    expect(confirmDialog).toBeInTheDocument();
+
+    // Click Cancel
+    const cancelBtn = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /confirm synthetic demo seeding/i })).not.toBeInTheDocument();
+    });
+    expect(endpoints.seedDemoTelemetry).not.toHaveBeenCalled();
+  });
+
+  it('switches time horizon between 7 Days and 14 Days and keeps 30D/90D disabled', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValue(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/14-Day Complaint Velocity & Adjudication Trend/i)).toBeInTheDocument();
+    });
+
+    const btn7D = screen.getByRole('button', { name: /7 days/i });
+    const btn14D = screen.getByRole('button', { name: /14 days/i });
+    const btn30D = screen.getByRole('button', { name: /30d/i });
+    const btn90D = screen.getByRole('button', { name: /90d/i });
+
+    // 14D is active by default
+    expect(btn14D).toHaveAttribute('aria-pressed', 'true');
+    expect(btn7D).toHaveAttribute('aria-pressed', 'false');
+
+    // 30D and 90D must be disabled to avoid fabricating missing history
+    expect(btn30D).toBeDisabled();
+    expect(btn90D).toBeDisabled();
+
+    // Switch to 7D
+    fireEvent.click(btn7D);
+    expect(btn7D).toHaveAttribute('aria-pressed', 'true');
+    expect(btn14D).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/7-Day Complaint Velocity & Adjudication Trend/i)).toBeInTheDocument();
+
+    // Switch back to 14D
+    fireEvent.click(btn14D);
+    expect(btn14D).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/14-Day Complaint Velocity & Adjudication Trend/i)).toBeInTheDocument();
+  });
+
+  it('renders operational velocity summary metrics and category volume progress bars', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValue(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Period Total Inflow/i)).toBeInTheDocument();
+      expect(screen.getByText(/Period Straight-Through/i)).toBeInTheDocument();
+      expect(screen.getByText(/Period Human Adjudicated/i)).toBeInTheDocument();
+      expect(screen.getByText(/Avg\. Daily Volume/i)).toBeInTheDocument();
+    });
+
+    // Check progress bars for categories
+    const progressBars = screen.getAllByRole('progressbar');
+    expect(progressBars.length).toBe(2); // Debt collection, Credit card
   });
 
   it('displays error state when API fails', async () => {
@@ -159,5 +255,164 @@ describe('ExecutiveAnalyticsPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Failed to retrieve executive analytics/i)).toBeInTheDocument();
     });
+  });
+
+  it('displays three-part adjudication volume breakdown (Approved, Overrides, Rejected) reconciling with humanReviewed', async () => {
+    const analyticsWithRejections: ExecutiveAnalyticsResponse = {
+      ...sampleAnalytics,
+      humanReviewed: 40,
+      statusDistribution: {
+        PENDING_REVIEW: 25,
+        AUTO_ROUTED: 35,
+        APPROVED: 25,
+        OVERRIDDEN: 10,
+        REJECTED: 5,
+      },
+    };
+
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValueOnce(analyticsWithRejections);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Adjudicated Volume')).toBeInTheDocument();
+    });
+
+    const card = screen.getByText('Adjudicated Volume').closest<HTMLElement>('div.shadow-card')!;
+    // Check that humanReviewed matches sum of parts (25 + 10 + 5 = 40)
+    expect(within(card).getByText('40')).toBeInTheDocument();
+    expect(within(card).getByText('25')).toBeInTheDocument();
+    expect(within(card).getByText(/approved/i)).toBeInTheDocument();
+    expect(within(card).getByText('10')).toBeInTheDocument();
+    expect(within(card).getByText(/overrides/i)).toBeInTheDocument();
+    expect(within(card).getByText('5')).toBeInTheDocument();
+    expect(within(card).getByText(/rejected/i)).toBeInTheDocument();
+  });
+
+  it('renders accurate SLA aging breakdown labels reflecting policy thresholds', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValueOnce(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/SLA Queue Aging/i)).toBeInTheDocument();
+    });
+
+    const slaCard = screen.getByText('SLA Queue Aging').closest<HTMLElement>('div.shadow-card')!;
+    // Check column labels and status descriptions
+    expect(within(slaCard).getByText(/≤ 24 Hours/i)).toBeInTheDocument();
+    expect(within(slaCard).getByText('Within Target')).toBeInTheDocument();
+    expect(within(slaCard).getByText(/> 24h – ≤ 72h/i)).toBeInTheDocument();
+    expect(within(slaCard).getByText('Target Overdue / At Risk')).toBeInTheDocument();
+    expect(within(slaCard).getByText(/> 72 Hours/i)).toBeInTheDocument();
+    expect(within(slaCard).getByText('Escalation Breach')).toBeInTheDocument();
+
+    // Check Target badge
+    expect(within(slaCard).getByText(/Target: ≤ 24h/i)).toBeInTheDocument();
+
+    // Check Executive Overview KPI cards 4 & 5
+    expect(screen.getByText(/within target/)).toBeInTheDocument();
+    expect(screen.getByText(/escalation breach/)).toBeInTheDocument();
+    expect(screen.getByText(/target overdue/)).toBeInTheDocument();
+  });
+
+  it('renders Straight-Through Automation Rate with explanatory denominator tooltip note', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValueOnce(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Straight-Through Automation Rate')).toBeInTheDocument();
+    });
+
+    // Check explanatory note clarifying denominator and distinction from ML model precision
+    const note = screen.getByRole('note');
+    expect(note).toBeInTheDocument();
+    expect(note).toHaveAttribute(
+      'title',
+      'Percentage of all ingested grievances currently classified as AUTO_ROUTED. Measures volume routing proportion, not model prediction accuracy or precision.'
+    );
+  });
+
+  it('renders on-demand telemetry badges and initial last updated timestamp', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValueOnce(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('On-Demand Telemetry')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Point-in-Time Database Snapshot')).toBeInTheDocument();
+    expect(screen.getAllByText('Point-in-Time Snapshot').length).toBeGreaterThanOrEqual(3);
+
+    // Ensure misleading continuous streaming claims are NOT present
+    expect(screen.queryByText(/Live Operational Queue/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Real-time DB Counts/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Live Queue Data/i)).not.toBeInTheDocument();
+
+    // Timestamp is rendered
+    expect(screen.getByText(/Last Updated:/i)).toBeInTheDocument();
+  });
+
+  it('updates timestamp after successful manual refresh and preserves previous timestamp when refresh fails', async () => {
+    const toLocaleTimeStringSpy = vi.spyOn(Date.prototype, 'toLocaleTimeString');
+    toLocaleTimeStringSpy.mockReturnValueOnce('10:00:00 AM');
+
+    vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValue(sampleAnalytics);
+
+    render(
+      <MemoryRouter>
+        <ExecutiveAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Last Updated: 10:00:00 AM/i)).toBeInTheDocument();
+    });
+
+    const refreshBtn = screen.getAllByRole('button', { name: /refresh/i })[0]!;
+
+    // Set next return value for manual refresh
+    toLocaleTimeStringSpy.mockReturnValueOnce('10:05:30 AM');
+    fireEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Last Updated: 10:05:30 AM/i)).toBeInTheDocument();
+    });
+
+    // Now make next fetch fail
+    toLocaleTimeStringSpy.mockReturnValueOnce('10:15:00 AM');
+    vi.mocked(endpoints.getExecutiveAnalytics).mockRejectedValueOnce(
+      new Error('Transient database network timeout')
+    );
+
+    fireEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Transient database network timeout/i)).toBeInTheDocument();
+    });
+
+    // Failed fetch must NOT update timestamp to 10:15:00 AM; previous 10:05:30 AM timestamp must be preserved
+    expect(screen.getByText(/Last Updated: 10:05:30 AM/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Last Updated: 10:15:00 AM/i)).not.toBeInTheDocument();
+
+    toLocaleTimeStringSpy.mockRestore();
   });
 });

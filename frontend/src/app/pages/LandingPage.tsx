@@ -40,10 +40,19 @@ export const LandingPage: React.FC = () => {
   const prefersReducedMotion = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Scroll-aware navbar transition
+  // Scroll-aware navbar transition & hash link anchor handling
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 80);
     window.addEventListener('scroll', handleScroll, { passive: true });
+
+    if (window.location.hash) {
+      const target = document.querySelector(window.location.hash);
+      if (target) {
+        target.scrollIntoView();
+        handleScroll();
+      }
+    }
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 

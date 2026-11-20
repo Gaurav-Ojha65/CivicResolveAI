@@ -1,13 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Eye, ShieldAlert, TrendingUp, TrendingDown } from 'lucide-react';
+import { Eye, ShieldAlert, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react';
 import { FeatureContribution } from '../../../types/grievance';
 
-interface LinearAttributionHighlighterProps {
+export interface LinearAttributionHighlighterProps {
   narrative: string;
   topPositiveFeatures?: FeatureContribution[];
   topNegativeFeatures?: FeatureContribution[];
   topDifferenceFeatures?: FeatureContribution[];
   priorityReasons?: string[];
+  activeFeature?: string | null;
+  onFeatureHover?: (feature: string | null) => void;
+  onFeatureSelect?: (feature: string | null) => void;
 }
 
 interface MatchSpan {
@@ -34,6 +37,9 @@ export const LinearAttributionHighlighter: React.FC<LinearAttributionHighlighter
   topNegativeFeatures = [],
   topDifferenceFeatures = [],
   priorityReasons = [],
+  activeFeature,
+  onFeatureHover,
+  onFeatureSelect,
 }) => {
   const [showPositive, setShowPositive] = useState(true);
   const [showNegative, setShowNegative] = useState(true);
@@ -147,6 +153,42 @@ export const LinearAttributionHighlighter: React.FC<LinearAttributionHighlighter
     return nonOverlapping;
   }, [narrative, positiveMap, negativeMap, showPositive, showNegative, showRisk, priorityReasons]);
 
+  // Helper to extract feature key identifier for active matching and selection
+  const getSpanFeatureKey = (span: MatchSpan): string => {
+    return span.feature?.feature || span.keywordReason || span.text;
+  };
+
+  // Helper to determine if a span matches the activeFeature
+  const isSpanMatch = (span: MatchSpan): boolean => {
+    if (!activeFeature) return false;
+    const target = activeFeature.trim().toLowerCase();
+    const feat = span.feature?.feature?.trim().toLowerCase();
+    const reason = span.keywordReason?.trim().toLowerCase();
+    const text = span.text?.trim().toLowerCase();
+
+    if (feat === target || reason === target || text === target) {
+      return true;
+    }
+    if (reason && reason.includes(target)) {
+      return true;
+    }
+    return false;
+  };
+
+  // Find matching span for currently active feature if activeTooltip is not explicitly set
+  const matchingSpanForActiveFeature = useMemo(() => {
+    if (!activeFeature) return null;
+    return spans.find((s) => isSpanMatch(s)) || null;
+  }, [spans, activeFeature]);
+
+  const displayedTooltip = activeTooltip || matchingSpanForActiveFeature;
+
+  const handleSpanInteraction = (span: MatchSpan) => {
+    const key = getSpanFeatureKey(span);
+    setActiveTooltip(span);
+    onFeatureSelect?.(key);
+  };
+
   // Build rendered tokens safely without dangerouslySetInnerHTML
   const renderedContent = useMemo(() => {
     if (!narrative) return null;
@@ -166,22 +208,51 @@ export const LinearAttributionHighlighter: React.FC<LinearAttributionHighlighter
         );
       }
 
-      let badgeClasses = '';
+      const isMatch = isSpanMatch(span);
+      const isDimmed = Boolean(activeFeature && !isMatch);
+
+      let badgeClasses = 'inline-block font-semibold rounded px-1 py-0.5 transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-teal-500';
       if (span.type === 'positive') {
-        badgeClasses = 'bg-teal-100/90 text-teal-950 border border-teal-300 font-semibold rounded px-1 py-0.5 transition-colors hover:bg-teal-200 cursor-help';
+        badgeClasses += ' bg-teal-100/90 text-teal-950 border border-teal-300 hover:bg-teal-200';
       } else if (span.type === 'negative') {
-        badgeClasses = 'bg-amber-100/90 text-amber-950 border border-amber-300 font-semibold rounded px-1 py-0.5 transition-colors hover:bg-amber-200 cursor-help';
+        badgeClasses += ' bg-amber-100/90 text-amber-950 border border-amber-300 hover:bg-amber-200';
       } else {
-        badgeClasses = 'bg-rose-100/90 text-rose-950 border border-rose-300 font-semibold rounded px-1 py-0.5 transition-colors hover:bg-rose-200 cursor-help';
+        badgeClasses += ' bg-rose-100/90 text-rose-950 border border-rose-300 hover:bg-rose-200';
+      }
+
+      if (isMatch) {
+        badgeClasses += ' ring-2 ring-teal-500 scale-[1.02] shadow-xs z-10';
+      } else if (isDimmed) {
+        badgeClasses += ' opacity-60';
       }
 
       segments.push(
         <mark
           key={`mark-${idx}-${span.start}`}
+          role="button"
+          tabIndex={0}
+          aria-pressed={isMatch}
+          aria-label={`Attribution token: ${span.text}. ${
+            span.feature
+              ? `Feature: ${span.feature.feature}, contribution: ${span.feature.contribution >= 0 ? '+' : ''}${span.feature.contribution.toFixed(4)}`
+              : span.keywordReason || 'Triage risk keyword'
+          }`}
           className={badgeClasses}
-          onMouseEnter={() => setActiveTooltip(span)}
-          onMouseLeave={() => setActiveTooltip((curr) => (curr === span ? null : curr))}
-          onClick={() => setActiveTooltip(span)}
+          onMouseEnter={() => {
+            setActiveTooltip(span);
+            onFeatureHover?.(getSpanFeatureKey(span));
+          }}
+          onMouseLeave={() => {
+            setActiveTooltip((curr) => (curr === span ? null : curr));
+            onFeatureHover?.(null);
+          }}
+          onClick={() => handleSpanInteraction(span)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleSpanInteraction(span);
+            }
+          }}
           title={
             span.feature
               ? `${span.feature.feature} (${span.feature.contribution >= 0 ? '+' : ''}${span.feature.contribution.toFixed(4)})`
@@ -204,7 +275,7 @@ export const LinearAttributionHighlighter: React.FC<LinearAttributionHighlighter
     }
 
     return segments;
-  }, [narrative, spans]);
+  }, [narrative, spans, activeFeature]);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
@@ -270,6 +341,29 @@ export const LinearAttributionHighlighter: React.FC<LinearAttributionHighlighter
         </div>
       </div>
 
+      {/* Clear Reset Indication when Active Feature is selected */}
+      {activeFeature && (
+        <div className="px-5 py-2.5 bg-teal-50/90 border-b border-teal-200/80 flex items-center justify-between text-xs text-teal-900 animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse" />
+            <span className="font-medium text-teal-900">
+              Active Feature Focus: <strong className="font-mono text-teal-950 underline">{activeFeature}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onFeatureSelect?.(null);
+              setActiveTooltip(null);
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-teal-800 hover:text-teal-950 bg-white border border-teal-300 shadow-2xs hover:bg-teal-50 transition-colors cursor-pointer"
+            aria-label="Reset active feature selection"
+          >
+            <RotateCcw size={11} /> Reset Filter
+          </button>
+        </div>
+      )}
+
       {/* Main Narrative with Highlighted Spans */}
       <div className="p-5 relative">
         <div className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl text-slate-900 text-xs md:text-sm leading-relaxed whitespace-pre-wrap font-sans selection:bg-teal-100 shadow-2xs">
@@ -277,51 +371,65 @@ export const LinearAttributionHighlighter: React.FC<LinearAttributionHighlighter
         </div>
 
         {/* Hover / Click Info Callout */}
-        {activeTooltip && (
-          <div className="mt-3 p-3 bg-slate-900 text-white rounded-xl shadow-lg border border-slate-700 text-xs flex items-center justify-between animate-in fade-in duration-150">
+        {displayedTooltip && (
+          <div className="mt-3 p-3 bg-slate-900 text-white rounded-xl shadow-lg border border-slate-700 text-xs flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
             <div className="flex items-center gap-2">
-              {activeTooltip.type === 'positive' && (
+              {displayedTooltip.type === 'positive' && (
                 <TrendingUp size={16} className="text-teal-400 shrink-0" />
               )}
-              {activeTooltip.type === 'negative' && (
+              {displayedTooltip.type === 'negative' && (
                 <TrendingDown size={16} className="text-amber-400 shrink-0" />
               )}
-              {activeTooltip.type === 'risk' && (
+              {displayedTooltip.type === 'risk' && (
                 <ShieldAlert size={16} className="text-rose-400 shrink-0" />
               )}
 
               <div>
                 <span className="font-mono font-bold text-teal-300">
-                  &ldquo;{activeTooltip.text}&rdquo;
+                  &ldquo;{displayedTooltip.text}&rdquo;
                 </span>
-                {activeTooltip.feature && (
+                {displayedTooltip.feature && (
                   <span className="ml-2 text-slate-300">
-                    Linear Driver: {activeTooltip.feature.feature}
+                    Linear Driver: {displayedTooltip.feature.feature}
                   </span>
                 )}
-                {activeTooltip.keywordReason && (
+                {displayedTooltip.keywordReason && (
                   <span className="ml-2 text-slate-300">
-                    Trigger: {activeTooltip.keywordReason}
+                    Trigger: {displayedTooltip.keywordReason}
                   </span>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-3 font-mono text-[11px]">
-              {activeTooltip.feature?.tfidfValue != null && (
+              {displayedTooltip.feature?.tfidfValue != null && (
                 <span className="text-slate-400">
-                  tfidf: {activeTooltip.feature.tfidfValue.toFixed(4)}
+                  tfidf: {displayedTooltip.feature.tfidfValue.toFixed(4)}
                 </span>
               )}
-              {activeTooltip.feature?.contribution != null && (
+              {displayedTooltip.feature?.contribution != null && (
                 <span
                   className={`font-bold ${
-                    activeTooltip.feature.contribution >= 0 ? 'text-teal-400' : 'text-amber-400'
+                    displayedTooltip.feature.contribution >= 0 ? 'text-teal-400' : 'text-amber-400'
                   }`}
                 >
-                  Weight: {activeTooltip.feature.contribution >= 0 ? '+' : ''}
-                  {activeTooltip.feature.contribution.toFixed(4)}
+                  Weight: {displayedTooltip.feature.contribution >= 0 ? '+' : ''}
+                  {displayedTooltip.feature.contribution.toFixed(4)}
                 </span>
+              )}
+              {activeFeature && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFeatureSelect?.(null);
+                    setActiveTooltip(null);
+                  }}
+                  className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 text-[10px] font-sans cursor-pointer transition-colors"
+                  title="Reset active feature highlight"
+                >
+                  <RotateCcw size={10} /> Reset Focus
+                </button>
               )}
             </div>
           </div>

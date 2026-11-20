@@ -288,4 +288,373 @@ describe('ReviewerGrievanceDetailPage', () => {
     expect(screen.queryByRole('button', { name: /approve grievance/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /apply override/i })).not.toBeInTheDocument();
   });
+
+  describe('Phase 3 Investigation Lab Enhancements', () => {
+    const MOCK_DETAIL_WITH_XAI: GrievanceDetailResponse = {
+      ...MOCK_DETAIL,
+      narrative: 'I noticed an unauthorized charge on my mortgage escrow account after refinancing.',
+      originalPrediction: {
+        ...MOCK_DETAIL.originalPrediction!,
+        explanation: {
+          predictedClass: 'Mortgage',
+          predictedDecisionScore: 2.15,
+          predictedIntercept: 0.12,
+          runnerUpClass: 'Debt collection',
+          runnerUpDecisionScore: 0.45,
+          runnerUpIntercept: -0.05,
+          decisionScoreMargin: 1.7,
+          topPositiveFeatures: [
+            { feature: 'escrow', contribution: 0.7543, tfidfValue: 0.35 },
+            { feature: 'mortgage', contribution: 0.6214, tfidfValue: 0.28 },
+          ],
+          topNegativeFeatures: [
+            { feature: 'charge', contribution: -0.2145, tfidfValue: 0.12 },
+          ],
+          topDifferenceFeatures: [],
+          modelProvenanceSha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+          explanationGeneratedAt: '2026-11-01T10:00:01Z',
+        },
+      },
+    };
+
+    it('synchronizes bidirectional XAI interaction: activeFeature highlights token and chart bar', async () => {
+      const user = userEvent.setup();
+      vi.mocked(endpoints.getGrievanceById).mockResolvedValueOnce(MOCK_DETAIL_WITH_XAI);
+
+      renderDetailPage();
+
+      // Wait for XAI attribution and bar chart to render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /attribution token: escrow/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /linear feature: escrow/i })).toBeInTheDocument();
+      });
+
+      const escrowToken = screen.getByRole('button', { name: /attribution token: escrow/i });
+      const chargeToken = screen.getByRole('button', { name: /attribution token: charge/i });
+      const escrowBar = screen.getByRole('button', { name: /linear feature: escrow/i });
+      const chargeBar = screen.getByRole('button', { name: /linear feature: charge/i });
+
+      // Click on escrow token in narrative to select/pin feature
+      await user.click(escrowToken);
+
+      // Verify Active XAI Focus banner appears
+      expect(screen.getByText(/Active XAI Focus:/i)).toBeInTheDocument();
+      expect(screen.getAllByText('escrow').length).toBeGreaterThanOrEqual(1);
+
+      // Matching token should have active ring highlight; non-matching dimmed
+      expect(escrowToken.className).toContain('ring-2 ring-teal-500');
+      expect(chargeToken.className).toContain('opacity-60');
+
+      // Matching bar row should have active ring highlight; non-matching dimmed
+      expect(escrowBar.className).toContain('ring-2 ring-teal-500');
+      expect(chargeBar.className).toContain('opacity-50');
+
+      // Click Reset Filter in the banner to clear activeFeature
+      const resetBtn = screen.getAllByRole('button', { name: /reset active feature/i })[0];
+      await user.click(resetBtn!);
+
+      expect(screen.queryByText(/Active XAI Focus:/i)).not.toBeInTheDocument();
+      expect(escrowToken.className).not.toContain('ring-2 ring-teal-500');
+      expect(chargeToken.className).not.toContain('opacity-60');
+
+      // Click on charge bar row to trigger reverse bidirectional highlight
+      await user.click(chargeBar);
+
+      expect(screen.getByText(/Active XAI Focus:/i)).toBeInTheDocument();
+      expect(chargeToken.className).toContain('ring-2 ring-teal-500');
+      expect(escrowToken.className).toContain('opacity-60');
+    });
+
+    it('renders mobile decision dock bar and supports opening expandable sheet for adjudication', async () => {
+      const user = userEvent.setup();
+      renderDetailPage();
+
+      // Pinned bottom decision bar should be present
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /adjudicate case/i })).toBeInTheDocument();
+      });
+
+      const openSheetBtn = screen.getByRole('button', { name: /adjudicate case/i });
+      expect(openSheetBtn).toHaveAttribute('aria-expanded', 'false');
+
+      // Click to open sheet
+      await user.click(openSheetBtn);
+
+      // Mobile sheet modal dialog should open
+      const dialog = screen.getByRole('dialog', { name: /adjudicate case/i });
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      expect(screen.getByText('Mobile Adjudication Sheet')).toBeInTheDocument();
+
+      // Submit APPROVE from within the sheet
+      const approveBtn = screen.getAllByRole('button', { name: /approve grievance/i });
+      // The second button is inside the mobile sheet
+      const mobileApproveBtn = approveBtn[approveBtn.length - 1];
+      await user.click(mobileApproveBtn!);
+
+      expect(endpoints.reviewGrievance).toHaveBeenCalledWith(
+        '12345678-abcd-1234-abcd-1234567890ab',
+        {
+          action: 'APPROVE',
+          expectedVersion: 2,
+          reviewNote: undefined,
+        }
+      );
+
+      // Sheet closes after successful review
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: /adjudicate case/i })).not.toBeInTheDocument();
+      });
+    });
+
+    it('handles long narrative without clipping and supports keyboard navigation on XAI elements', async () => {
+      const user = userEvent.setup();
+      const LONG_NARRATIVE =
+        'Detailed grievance documentation: '.repeat(20) +
+        'Escrow account was double billed repeatedly across 12 consecutive billing cycles. ' +
+        'Additional context and correspondence history: '.repeat(25);
+
+      vi.mocked(endpoints.getGrievanceById).mockResolvedValueOnce({
+        ...MOCK_DETAIL_WITH_XAI,
+        narrative: LONG_NARRATIVE,
+      });
+
+      renderDetailPage();
+
+      // Verify long narrative is rendered and accessible
+      await waitFor(() => {
+        expect(screen.getAllByText(/Detailed grievance documentation:/i).length).toBeGreaterThanOrEqual(1);
+      });
+
+      const escrowToken = screen.getByRole('button', { name: /attribution token: escrow/i });
+      expect(escrowToken).toHaveAttribute('tabIndex', '0');
+
+      // Test keyboard activation with Enter
+      escrowToken.focus();
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByText(/Active XAI Focus:/i)).toBeInTheDocument();
+
+      // Test keyboard activation with Space to toggle/unpin
+      await user.keyboard(' ');
+      expect(screen.queryByText(/Active XAI Focus:/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Phase 3.2 Investigation Lab Hardening', () => {
+    it('handles Escape-to-close and focus restoration for mobile adjudication sheet', async () => {
+      const user = userEvent.setup();
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /adjudicate case/i })).toBeInTheDocument();
+      });
+
+      const openSheetBtn = screen.getByRole('button', { name: /adjudicate case/i });
+      await user.click(openSheetBtn);
+
+      const dialog = screen.getByRole('dialog', { name: /adjudicate case/i });
+      expect(dialog).toBeInTheDocument();
+
+      // Press Escape to dismiss sheet
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: /adjudicate case/i })).not.toBeInTheDocument();
+      });
+
+      // Verify focus is restored to the trigger button
+      expect(openSheetBtn).toHaveFocus();
+    });
+
+    it('handles Escape-to-close and focus restoration for keyboard shortcuts modal', async () => {
+      const user = userEvent.setup();
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /shortcuts/i })).toBeInTheDocument();
+      });
+
+      const shortcutsBtn = screen.getByRole('button', { name: /shortcuts/i });
+      await user.click(shortcutsBtn);
+
+      const dialog = screen.getByRole('dialog', { name: /triage keyboard shortcuts/i });
+      expect(dialog).toBeInTheDocument();
+
+      // Press Escape to dismiss shortcuts modal
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: /triage keyboard shortcuts/i })).not.toBeInTheDocument();
+      });
+
+      // Verify focus is restored to the trigger button
+      expect(shortcutsBtn).toHaveFocus();
+    });
+
+    it('traps keyboard focus within active modal dialog on Tab and Shift+Tab', async () => {
+      const user = userEvent.setup();
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /shortcuts/i })).toBeInTheDocument();
+      });
+
+      const shortcutsBtn = screen.getByRole('button', { name: /shortcuts/i });
+      await user.click(shortcutsBtn);
+
+      const dialog = screen.getByRole('dialog', { name: /triage keyboard shortcuts/i });
+      expect(dialog).toBeInTheDocument();
+
+      // In the shortcuts dialog, find focusable buttons
+      const closeBtn = screen.getByRole('button', { name: /close shortcuts dialog/i });
+      const gotItBtn = screen.getByRole('button', { name: /got it/i });
+
+      // Focus last element ('Got it' button)
+      gotItBtn.focus();
+      expect(gotItBtn).toHaveFocus();
+
+      // Press Tab -> focus should wrap to first element (close button)
+      await user.tab();
+      expect(closeBtn).toHaveFocus();
+
+      // Press Shift+Tab -> focus should wrap back to last element ('Got it' button)
+      await user.tab({ shift: true });
+      expect(gotItBtn).toHaveFocus();
+
+      // Close dialog
+      await user.click(gotItBtn);
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: /triage keyboard shortcuts/i })).not.toBeInTheDocument();
+      });
+    });
+
+    it('excludes inactive desktop form from accessibility and prevents accidental submission when mobile sheet is open', async () => {
+      const user = userEvent.setup();
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /adjudicate case/i })).toBeInTheDocument();
+      });
+
+      const desktopForm = document.getElementById('desktop-decision-form');
+      expect(desktopForm).toBeInTheDocument();
+      expect(desktopForm).not.toHaveAttribute('aria-hidden');
+
+      // Open mobile sheet
+      const openSheetBtn = screen.getByRole('button', { name: /adjudicate case/i });
+      await user.click(openSheetBtn);
+
+      // Inactive desktop form receives aria-hidden and its submit button is disabled
+      expect(desktopForm).toHaveAttribute('aria-hidden', 'true');
+      const desktopSubmitBtn = desktopForm?.querySelector('button[type="submit"]');
+      expect(desktopSubmitBtn).toBeDisabled();
+
+      // Dismiss mobile sheet
+      await user.keyboard('{Escape}');
+
+      // Desktop form is active again
+      await waitFor(() => {
+        expect(desktopForm).not.toHaveAttribute('aria-hidden');
+      });
+      expect(desktopSubmitBtn).not.toBeDisabled();
+    });
+
+    it('prevents duplicate requests via synchronous submission mutex guard on rapid double clicks', async () => {
+      const user = userEvent.setup();
+
+      let resolvePromise: (val: unknown) => void;
+      const delayedPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+      vi.mocked(endpoints.reviewGrievance).mockImplementation(() => delayedPromise as any);
+
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
+      });
+
+      const approveBtn = screen.getByRole('button', { name: /approve grievance/i });
+
+      // Click rapidly twice
+      await user.click(approveBtn);
+      await user.click(approveBtn);
+
+      // Mutex guard ensures reviewGrievance was invoked ONLY once
+      expect(endpoints.reviewGrievance).toHaveBeenCalledTimes(1);
+
+      // Resolve the pending submission
+      resolvePromise!(MOCK_REVIEW_RESPONSE);
+
+      await waitFor(() => {
+        expect(screen.getByText(/successfully submitted decision: approve/i)).toBeInTheDocument();
+      });
+    });
+
+    it('releases the submission mutex guard when an API call fails or throws', async () => {
+      const user = userEvent.setup();
+
+      // Mock failure on first attempt
+      vi.mocked(endpoints.reviewGrievance).mockRejectedValueOnce(
+        new ApiError(500, 'Internal Server Error', undefined, 'Database timeout')
+      );
+
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
+      });
+
+      const approveBtn = screen.getByRole('button', { name: /approve grievance/i });
+      await user.click(approveBtn);
+
+      // Verify error is shown
+      await waitFor(() => {
+        expect(screen.getByText(/database timeout/i)).toBeInTheDocument();
+      });
+
+      // Guard must be released in finally block; mock second attempt to succeed
+      vi.mocked(endpoints.reviewGrievance).mockResolvedValueOnce(MOCK_REVIEW_RESPONSE);
+
+      await user.click(approveBtn);
+
+      // Verify second attempt was permitted and succeeded
+      expect(endpoints.reviewGrievance).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(screen.getByText(/successfully submitted decision: approve/i)).toBeInTheDocument();
+      });
+    });
+
+    it('enforces identical validation consistency between desktop and mobile forms', async () => {
+      const user = userEvent.setup();
+      renderDetailPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Override' })).toBeInTheDocument();
+      });
+
+      // Desktop validation: click Override without required fields
+      await user.click(screen.getByRole('button', { name: 'Override' }));
+      const desktopSubmit = screen.getByRole('button', { name: /apply override/i });
+      await user.click(desktopSubmit);
+
+      expect(
+        screen.getByText(/when overriding, you must specify a new category or a new priority\./i)
+      ).toBeInTheDocument();
+
+      // Open mobile sheet and verify the exact same validation applies
+      const openSheetBtn = screen.getByRole('button', { name: /adjudicate case/i });
+      await user.click(openSheetBtn);
+
+      const mobileDialog = screen.getByRole('dialog', { name: /adjudicate case/i });
+      const mobileSubmit = mobileDialog.querySelector('button[type="submit"]');
+      expect(mobileSubmit).toBeInTheDocument();
+      await user.click(mobileSubmit!);
+
+      expect(
+        screen.getAllByText(/when overriding, you must specify a new category or a new priority\./i).length
+      ).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
