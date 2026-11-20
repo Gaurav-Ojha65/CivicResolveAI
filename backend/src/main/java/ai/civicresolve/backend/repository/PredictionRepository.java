@@ -60,18 +60,21 @@ public interface PredictionRepository extends JpaRepository<Prediction, Long> {
            "FROM Prediction p JOIN p.grievance g")
     TriggerCounts countTriggers();
 
-    /** Projection for confidence calibration and decision margin bands. */
-    interface ConfidenceMarginBandsProjection {
+    /** Projection for confidence bands, decision margins and recorded sentiment labels. */
+    interface AnalyticsBuckets {
         long getConfidenceUnder55();
         long getConfidence55To75();
         long getConfidence75To90();
         long getConfidenceOver90();
         long getNarrowMarginCount();
         long getClearMarginCount();
+        long getNegativeSentiment();
+        long getNeutralSentiment();
+        long getPositiveSentiment();
     }
 
     /**
-     * Group-by query computing uncalibrated confidence bands and decision margin distribution directly in SQL.
+     * Counts prediction buckets in the database. Missing and unrecognized sentiment labels are uncounted.
      */
     @Query("SELECT " +
            "COALESCE(SUM(CASE WHEN p.confidence < 0.55 THEN 1L ELSE 0L END), 0L) AS confidenceUnder55, " +
@@ -79,7 +82,10 @@ public interface PredictionRepository extends JpaRepository<Prediction, Long> {
            "COALESCE(SUM(CASE WHEN p.confidence >= 0.75 AND p.confidence < 0.90 THEN 1L ELSE 0L END), 0L) AS confidence75To90, " +
            "COALESCE(SUM(CASE WHEN p.confidence >= 0.90 THEN 1L ELSE 0L END), 0L) AS confidenceOver90, " +
            "COALESCE(SUM(CASE WHEN p.margin < 0.15 THEN 1L ELSE 0L END), 0L) AS narrowMarginCount, " +
-           "COALESCE(SUM(CASE WHEN p.margin >= 0.15 THEN 1L ELSE 0L END), 0L) AS clearMarginCount " +
+           "COALESCE(SUM(CASE WHEN p.margin >= 0.15 THEN 1L ELSE 0L END), 0L) AS clearMarginCount, " +
+           "COALESCE(SUM(CASE WHEN p.sentimentLabel = 'NEGATIVE' THEN 1L ELSE 0L END), 0L) AS negativeSentiment, " +
+           "COALESCE(SUM(CASE WHEN p.sentimentLabel = 'NEUTRAL' THEN 1L ELSE 0L END), 0L) AS neutralSentiment, " +
+           "COALESCE(SUM(CASE WHEN p.sentimentLabel = 'POSITIVE' THEN 1L ELSE 0L END), 0L) AS positiveSentiment " +
            "FROM Prediction p")
-    ConfidenceMarginBandsProjection countConfidenceMarginBands();
+    AnalyticsBuckets countAnalyticsBuckets();
 }

@@ -20,15 +20,16 @@ import java.util.UUID;
 public interface GrievanceRepository extends JpaRepository<Grievance, UUID> {
 
     /**
-     * Paginated list with optional filters and keyword/ID prefix search. NULL parameters are ignored.
+     * Paginated list with optional filters and literal category/ID prefix search.
      */
     @Query("""
             SELECT g FROM Grievance g
             WHERE (:status IS NULL OR g.status = :status)
               AND (:priority IS NULL OR g.priority = :priority)
               AND (:category IS NULL OR g.assignedCategory = :category)
-              AND (:search IS NULL OR LOWER(CAST(g.id AS text)) LIKE LOWER(CONCAT(:search, '%')) OR LOWER(g.assignedCategory) LIKE LOWER(CONCAT('%', :search, '%')))
-            ORDER BY g.submittedAt DESC
+              AND (LOCATE(LOWER(:search), LOWER(CAST(g.id AS string))) = 1
+                   OR LOCATE(LOWER(:search), LOWER(g.assignedCategory)) > 0)
+            ORDER BY g.submittedAt DESC, g.id DESC
             """)
     Page<Grievance> findAll(
             @Param("status") GrievanceStatus status,
@@ -45,7 +46,7 @@ public interface GrievanceRepository extends JpaRepository<Grievance, UUID> {
             WHERE (:status IS NULL OR g.status = :status)
               AND (:priority IS NULL OR g.priority = :priority)
               AND (:category IS NULL OR g.assignedCategory = :category)
-            ORDER BY g.submittedAt DESC
+            ORDER BY g.submittedAt DESC, g.id DESC
             """)
     Page<Grievance> findAll(
             @Param("status") GrievanceStatus status,
@@ -92,7 +93,7 @@ public interface GrievanceRepository extends JpaRepository<Grievance, UUID> {
            "GROUP BY g.assignedCategory")
     java.util.List<CategoryPriorityVolumeProjection> countCategoryPriorityVolumeGrouped();
 
-    /** Projection for queue SLA aging. */
+    /** Legacy projection name retained for fixed pending-case age bands. */
     interface SlaAgingProjection {
         long getOnTrackCount();
         long getAtRiskCount();
@@ -100,7 +101,7 @@ public interface GrievanceRepository extends JpaRepository<Grievance, UUID> {
     }
 
     /**
-     * Group-by query computing pending review SLA aging breakdown directly in SQL.
+     * Group-by query computing fixed pending-case age bands directly in SQL.
      */
     @Query("SELECT " +
            "COALESCE(SUM(CASE WHEN g.submittedAt >= :twentyFourHoursAgo THEN 1L ELSE 0L END), 0L) AS onTrackCount, " +

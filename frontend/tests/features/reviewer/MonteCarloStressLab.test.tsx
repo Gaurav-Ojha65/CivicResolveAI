@@ -126,7 +126,7 @@ describe('Monte Carlo Queue & AI Policy Stress Engine', () => {
     expect(wellStaffed.summary.dailyClearanceCapacity).toBeGreaterThan(understaffed.summary.dailyClearanceCapacity);
   });
 
-  it('Test 4: Simplex & Critical Floor Invariant — Human review rate never drops below statutory safety floor', () => {
+  it('Test 4: Simplex & Critical Floor Invariant — Human review rate never drops below the configured routing floor', () => {
     // Highly permissive thresholds: confidence 0.35, margin 0.05
     const permissiveRate = interpolateHumanReviewRate({
       confidenceGate: 0.35,
@@ -187,7 +187,9 @@ describe('MonteCarloStressLab UI Component', () => {
     expect(screen.getByText(/Simulated Routing Split/i)).toBeInTheDocument();
     expect(screen.getByText(/Day-14 Median \(P50\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Tail-Risk \(VaR 95 \/ CVaR 95\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/72h SLA Breach Risk/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Three-day Capacity Exceedance$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Daily Capacity Exceedance/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\bSLA\b/i)).not.toBeInTheDocument();
 
     // Check All 3 Synchronized SVG Charts
     expect(screen.getByTestId('mc-fan-chart-svg')).toBeInTheDocument();

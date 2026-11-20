@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -156,6 +156,89 @@ describe('ReviewerDashboardPage', () => {
       'href',
       '/reviewer/grievances/12345678-abcd-1234-abcd-1234567890ab'
     );
+    expect(screen.getByRole('columnheader', { name: /case age/i })).toBeInTheDocument();
+    expect(screen.queryByText(/\bSLA\b/i)).not.toBeInTheDocument();
+  });
+
+  it('resets to page one for search and uses the totals from the filtered response', async () => {
+    const result = { ...MOCK_GRIEVANCE, id: '23456789-abcd-1234-abcd-1234567890ab', assignedCategory: 'Credit card' };
+    vi.mocked(endpoints.listGrievances).mockImplementation(async (params) => {
+      if (params?.search) return { ...MOCK_PAGE, content: [result] };
+      if (params?.page === 1) return { ...MOCK_PAGE, number: 1, first: false, totalElements: 21, totalPages: 2 };
+      return { ...MOCK_PAGE, totalElements: 21, totalPages: 2, last: false };
+    });
+
+    const user = userEvent.setup();
+    renderDashboard();
+    await screen.findByText('Page 1 of 2');
+    await user.selectOptions(screen.getByLabelText(/filter by status/i), 'PENDING_REVIEW');
+    await user.selectOptions(screen.getByLabelText(/filter by priority/i), 'HIGH');
+    await user.click(await screen.findByRole('button', { name: /next/i }));
+    await screen.findByText('Page 2 of 2');
+
+    fireEvent.change(screen.getByPlaceholderText(/category or id/i), { target: { value: '  credit  ' } });
+
+    expect(await screen.findByText('Credit card')).toBeInTheDocument();
+    expect(endpoints.listGrievances).toHaveBeenLastCalledWith(
+      { page: 0, size: 20, status: 'PENDING_REVIEW', priority: 'HIGH', search: 'credit' },
+      expect.any(AbortSignal)
+    );
+    expect(screen.getByText(/^Showing/)).toHaveTextContent('Showing 1 to 1 of 1');
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+    expect(screen.queryByText('Mortgage')).not.toBeInTheDocument();
+  });
+
+  it('ignores a superseded search response that completes after the current response', async () => {
+    const result = { ...MOCK_GRIEVANCE, assignedCategory: 'Credit card' };
+    let resolveSuperseded!: (page: SpringPage<GrievanceResponse>) => void;
+    const superseded = new Promise<SpringPage<GrievanceResponse>>((resolve) => { resolveSuperseded = resolve; });
+    vi.mocked(endpoints.listGrievances).mockImplementation((params) => {
+      if (params?.search === 'Mortgage') return superseded;
+      if (params?.search === 'credit') return Promise.resolve({ ...MOCK_PAGE, content: [result] });
+      return Promise.resolve(MOCK_PAGE);
+    });
+
+    renderDashboard();
+    await screen.findByText('Mortgage');
+    const input = screen.getByPlaceholderText(/category or id/i);
+    fireEvent.change(input, { target: { value: 'Mortgage' } });
+    const oldSignal = vi.mocked(endpoints.listGrievances).mock.lastCall?.[1];
+    fireEvent.change(input, { target: { value: 'credit' } });
+
+    expect(await screen.findByText('Credit card')).toBeInTheDocument();
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () => resolveSuperseded(MOCK_PAGE));
+    expect(screen.getByText('Credit card')).toBeInTheDocument();
+    expect(screen.queryByText('Mortgage')).not.toBeInTheDocument();
+  });
+
+  it('offers only status and priority filters supported by the API', async () => {
+    renderDashboard();
+    await screen.findByText('Mortgage');
+    const optionValues = (label: RegExp) =>
+      Array.from((screen.getByLabelText(label) as HTMLSelectElement).options, (option) => option.value);
+    expect(optionValues(/filter by status/i)).toEqual(['ALL', 'PENDING_REVIEW', 'AUTO_ROUTED', 'APPROVED', 'OVERRIDDEN', 'REJECTED']);
+    expect(optionValues(/filter by priority/i)).toEqual(['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+  });
+
+  it('uses the critical-priority count and filter consistently', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    const label = await screen.findByText('Critical Priority');
+    const card = label.closest<HTMLElement>('div.cursor-pointer');
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText('5')).toBeInTheDocument();
+
+    vi.mocked(endpoints.listGrievances).mockClear();
+    await user.click(card!);
+
+    await waitFor(() => {
+      expect(endpoints.listGrievances).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 0, size: 20, priority: 'CRITICAL' }),
+        expect.any(AbortSignal)
+      );
+    });
   });
 
   it('renders empty state when queue returns zero complaints', async () => {

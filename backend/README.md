@@ -1,13 +1,13 @@
 # CivicResolve AI — Spring Boot Backend
 
-Phase 7 implementation: Java 25 + Spring Boot 4.1.1 + PostgreSQL 18.6
+Java 25 + Spring Boot 4.1.1 + PostgreSQL. CI validates against PostgreSQL 16.
 
 ## Prerequisites
 
 | Requirement | Verified Version |
 |---|---|
 | JDK | 25.0.2 (`C:\Program Files\Java\jdk-25.0.2`) |
-| PostgreSQL | 18.6 (running on `127.0.0.1:5432`) |
+| PostgreSQL | 16+ |
 | Maven Wrapper | Downloads Apache Maven 3.10.0 on first use |
 | FastAPI NLP service | Running on `http://127.0.0.1:8000` |
 
@@ -96,6 +96,7 @@ Base URL: `http://localhost:8080/api`
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/grievances` | Submit a new complaint narrative |
+| `POST` | `/api/grievances/track` | Retrieve a scrubbed status using reference ID and tracking secret |
 | `GET` | `/api/product-categories` | List the 8 supported categories |
 | `GET` | `/api/health` | Liveness check |
 
@@ -107,6 +108,12 @@ Base URL: `http://localhost:8080/api`
 | `GET` | `/api/grievances/stats` | Dashboard counts by status and priority |
 | `GET` | `/api/grievances/{id}` | Detailed view including original prediction |
 | `PATCH` | `/api/grievances/{id}/review` | APPROVE / OVERRIDE / REJECT |
+| `GET` | `/api/grievances/analytics/overview` | Operational analytics, including counts of persisted sentiment labels |
+| `GET` | `/api/grievances/analytics/active-learning-export` | Curated export in `jsonl`, `csv`, or `manifest` format |
+
+The reviewer queue applies `status`, `priority`, `category`, and `search` before pagination. Search matches a case-insensitive category substring or grievance ID prefix. Results are ordered by submission time descending, then ID descending. Pages are zero-based and page size defaults to 20 with a cap of 100.
+
+Sentiment counts cover prediction records labeled `NEGATIVE`, `NEUTRAL`, or `POSITIVE`. Unlabeled or unrecognized records are excluded from those counts. CSV exports quote text fields and prefix spreadsheet-sensitive values with an apostrophe. Use JSONL for machine processing when you need the original masked text.
 
 ### Example: Submit a complaint
 
@@ -120,12 +127,14 @@ Response (HTTP 201):
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "assignedCategory": "Credit reporting or other personal consumer reports",
+  "trackingSecret": "trk_one_time_secret_returned_only_here",
+  "category": "Credit reporting or other personal consumer reports",
   "priority": "LOW",
   "status": "AUTO_ROUTED",
   "reviewRequired": false,
   "submittedAt": "2026-10-23T08:30:00Z",
-  "updatedAt": "2026-10-23T08:30:00Z"
+  "updatedAt": "2026-10-23T08:30:00Z",
+  "version": 0
 }
 ```
 
@@ -135,7 +144,7 @@ Response (HTTP 201):
 curl -X PATCH http://localhost:8080/api/grievances/{id}/review \
   -u reviewer:<password> \
   -H "Content-Type: application/json" \
-  -d '{"action": "APPROVE"}'
+  -d '{"action": "APPROVE", "expectedVersion": 0}'
 ```
 
 ## Authentication
@@ -144,7 +153,7 @@ curl -X PATCH http://localhost:8080/api/grievances/{id}/review \
 - **Endpoint protection**: All `GET /api/grievances*` and `PATCH /api/grievances*` require the `REVIEWER` role
 - **Reviewer credentials**: username `reviewer`, password from `REVIEWER_PASSWORD` env var
 - **Password hashing**: BCrypt cost factor 12
-- **Public endpoints**: `POST /api/grievances`, `GET /api/product-categories`, `GET /api/health`
+- **Public endpoints**: `POST /api/grievances`, `POST /api/grievances/track`, `GET /api/product-categories`, `GET /api/health`
 
 ## Database Configuration
 
@@ -161,9 +170,12 @@ Migrations run automatically at startup using `civicresolve_migrator`:
 
 | Version | File | Description |
 |---|---|---|
-| V1 | `V1__create_schema.sql` | Creates all 4 tables with PK, FK, indexes, constraints, JSONB |
+| V1 | `V1__create_schema.sql` | Creates the initial four tables with PK, FK, indexes, constraints, JSONB |
 | V2 | `V2__seed_categories.sql` | Seeds 8 CFPB product categories (idempotent) |
 | V3 | `V3__grant_privileges.sql` | Grants least-privilege to `civicresolve_app` |
+| V4 | `V4__add_version_and_prediction_category_fk.sql` | Adds optimistic locking and prediction-category integrity |
+| V5 | `V5__add_complaint_tracking.sql` | Adds hashed public tracking credentials and least-privilege grants |
+| V6 | `V6__add_prediction_explanation.sql` | Adds immutable JSONB explanation snapshots |
 
 ### Schema Summary
 
@@ -171,6 +183,7 @@ Migrations run automatically at startup using `civicresolve_migrator`:
 - **`grievances`** — Complaint UUID, narrative, category, priority, status, timestamps
 - **`predictions`** — Immutable NLP output with JSONB probability distribution and reasons
 - **`audit_log`** — Append-only event log (INSERT only, never UPDATE/DELETE)
+- **`grievance_tracking_credentials`** — Salted tracking-secret hashes and bounded lookup metadata
 
 ## Error Responses (RFC 9457 Problem Details)
 
@@ -189,6 +202,7 @@ All errors return structured Problem Details:
 | Condition | HTTP Status |
 |---|---|
 | Input validation failure | 400 |
+| Invalid pagination or malformed query parameter | 400 |
 | Grievance not found | 404 |
 | Invalid review state transition | 409 |
 | NLP service unavailable | 503 |
@@ -202,7 +216,7 @@ All errors return structured Problem Details:
 2. Call FastAPI `/classify` **outside** the database transaction
 3. Validate the NLP prediction (approved category, valid priority, triage safety contract)
 4. If `flag_for_review=true` → status `PENDING_REVIEW`; otherwise → `AUTO_ROUTED`
-5. **Atomically persist**: grievance + original prediction + initial audit event
+5. **Atomically persist**: grievance + original prediction + tracking credential + initial audit event
 6. If any step fails, no partial records are created
 
 ## Triage Safety Contract
@@ -230,8 +244,7 @@ backend\mvnw.cmd clean verify
 ## Known Limitations
 
 1. **Authentication**: In-memory HTTP Basic authentication. Replace with LDAP/OIDC before production.
-2. **CORS**: Disabled in Phase 7. Will be configured per-origin in Phase 8 (React frontend).
-3. **Integration tests**: Skipped automatically if `SPRING_DATASOURCE_PASSWORD` env var is not set.
-4. **H2 in unit tests**: Used for slice tests only. PostgreSQL compatibility is validated in `*IT.java` tests.
-5. **NLP service**: Narrative validation uses 20–5000 char range (Spring), while FastAPI accepts up to 10,000. This is a conservative Spring-side constraint; adjust if needed.
-6. **Reviewer account**: Only one hardcoded reviewer username `reviewer`. Multi-user support requires Phase 9 user management.
+2. **CORS**: Allowed origins are configured with `CORS_ALLOWED_ORIGINS`; development defaults cover the documented Vite ports and must be overridden for deployment.
+3. **Integration tests**: `mvn verify` requires a real isolated PostgreSQL database plus both application and Flyway credentials; no embedded H2 compatibility substitute is configured.
+4. **NLP service**: Narrative validation uses 20–5000 char range (Spring), while FastAPI accepts up to 10,000. This is a conservative Spring-side constraint; adjust only with an API-contract review.
+5. **Reviewer account**: Only one configured reviewer username `reviewer`. Multi-user support requires a separate identity-management phase.

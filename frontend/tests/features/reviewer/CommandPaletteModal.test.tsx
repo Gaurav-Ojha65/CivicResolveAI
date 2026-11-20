@@ -174,7 +174,7 @@ describe('CommandPaletteModal', () => {
     fireEvent.change(input, { target: { value: 'debt' } });
 
     await waitFor(() => {
-      expect(endpoints.listGrievances).toHaveBeenCalledWith({ search: 'debt', size: 5 });
+      expect(endpoints.listGrievances).toHaveBeenCalledWith({ search: 'debt', size: 5 }, expect.any(AbortSignal));
       expect(screen.getByText(/ID: a1b2c3d4/i)).toBeInTheDocument();
     });
   });

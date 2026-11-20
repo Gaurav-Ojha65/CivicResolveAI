@@ -15,7 +15,7 @@ flowchart TD
         CitizenPortal["Public Citizen Portal
 (/, /submit, /track)"]
         ReviewerApp["Reviewer Workspace & Decision Lab
-(/reviewer/dashboard, /reviewer/grievances/:id)"]
+(/reviewer, /reviewer/grievances/:id)"]
         ReactApp --> CitizenPortal
         ReactApp --> ReviewerApp
     end
@@ -26,7 +26,7 @@ Proxy: /api/* -> Backend:8080"]
     end
 
     subgraph BackendTier ["3. Application Tier (Port 8080)"]
-        SpringApp["Spring Boot 4.1.1 (Java 25 / 21)"]
+        SpringApp["Spring Boot 4.1.1 (Java 25)"]
         SecFilter["SecurityConfig & RateLimitFilter"]
         Controllers["GrievanceController & AuthController"]
         ServiceLayer["GrievanceService & PersistenceService"]
@@ -43,7 +43,7 @@ Proxy: /api/* -> Backend:8080"]
     end
 
     subgraph NlpTier ["4. Machine Learning Microservice (Port 8000)"]
-        FastAPI["FastAPI / Uvicorn Service (Python 3.11+)"]
+        FastAPI["FastAPI / Uvicorn Service (Python 3.12+)"]
         ModelManager["ModelManager (Thread-Safe Snapshot Isolation)"]
         BaselineModel["Authoritative Classifier:
 TF-IDF + Logistic Regression (50k features)"]
@@ -75,7 +75,7 @@ Bidirectional LSTM (PyTorch)"]
     ServiceLayer -->|DML: SELECT / INSERT / UPDATE| AppRole
     IsoGuard -.->|Validates Role Privilege| Postgres
     MigratorRole -.->|Applies Schema DDL| Postgres
-    NlpClient -->|HTTP /classify, /compare-models| FastAPI
+    NlpClient -->|HTTP /classify, /classify/compare| FastAPI
 ```
 
 ---
@@ -90,10 +90,10 @@ Bidirectional LSTM (PyTorch)"]
 - **Key Modules**:
   - `Intake`: Complaint submission form with client-side validation (20–5,000 characters) and pre-submission safeguard inspects.
   - `Tracking`: Public status lookups displaying scrubbed customer timelines.
-  - `Reviewer`: Protected workspace containing the Triage Queue, SLA counters, and the Flagship Decision Intelligence Lab.
+  - `Reviewer`: Protected workspace containing the server-paginated triage queue, descriptive case-age indicators, and the Decision Intelligence Lab.
 
 ### B. Application Tier (Spring Boot 4.1.1)
-- **Framework**: Spring Boot 4.1.1 running on Java 25 (Java 21 LTS compatible) with embedded Tomcat 11.
+- **Framework**: Spring Boot 4.1.1 compiled for Java 25 with embedded Tomcat 11.
 - **Security & Authorization**:
   - Spring Security with method-level `@PreAuthorize("hasRole('REVIEWER')")`.
   - BCrypt-12 credential hashing for reviewer accounts.
@@ -137,8 +137,8 @@ sequenceDiagram
     Backend->>Backend: Compute SHA-256 hash of tracking secret
     Backend->>DB: INSERT grievance & prediction & tracking_credential
     DB-->>Backend: Persisted (Version 0, Status AUTO_ROUTED)
-    Backend-->>Frontend: 201 Created (referenceNumber, trackingSecret)
-    Frontend-->>Citizen: Display Reference Number & One-Time Secret
+    Backend-->>Frontend: 201 Created (id, trackingSecret, version)
+    Frontend-->>Citizen: Display Grievance ID & One-Time Secret
 ```
 
 ### B. Flagship Decision Intelligence Lab Flow
@@ -160,7 +160,7 @@ sequenceDiagram
     Note over Frontend: Reviewer edits text in Zone B (What-If Lab)
     Reviewer->>Frontend: Click "Compare Models & Run Replay"
     Frontend->>Backend: POST /api/grievances/compare-models { text }
-    Backend->>NLP: POST /compare-models { text }
+    Backend->>NLP: POST /classify/compare { text }
     NLP->>NLP: Run Baseline (TF-IDF) & Challenger (Bi-LSTM) in parallel
     NLP-->>Backend: 200 OK (dual-model summary, confidence delta, agreement flag)
     Backend-->>Frontend: 200 OK (Zone C telemetry)

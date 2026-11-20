@@ -258,7 +258,7 @@ describe('TrackGrievancePage', () => {
   });
 
   describe('Status Stepper Exhaustive Suite (one test per status)', () => {
-    it('correctly maps PENDING_REVIEW to Stage 2 of 4: Auto-Triaged', async () => {
+    it('shows PENDING_REVIEW at the specialist review stage while awaiting a reviewer', async () => {
       const user = userEvent.setup();
       vi.mocked(trackGrievance).mockResolvedValueOnce({
         ...MOCK_TRACKING_RESPONSE,
@@ -271,7 +271,8 @@ describe('TrackGrievancePage', () => {
       await user.click(screen.getByRole('button', { name: /track complaint/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Stage 2 of 4: Auto-Triaged')).toBeInTheDocument();
+        expect(screen.getByText('Stage 3 of 4: Specialist review (if needed)')).toBeInTheDocument();
+        expect(screen.getByText('Awaiting review')).toBeInTheDocument();
       });
     });
 
@@ -291,23 +292,6 @@ describe('TrackGrievancePage', () => {
         expect(screen.getByText('Stage 2 of 4: Auto-Triaged')).toBeInTheDocument();
       });
       expect(screen.queryByText('Stage 4 of 4: Resolved')).not.toBeInTheDocument();
-    });
-
-    it('correctly maps UNDER_REVIEW to Stage 3 of 4: Specialist review (if needed)', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'UNDER_REVIEW',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 3 of 4: Specialist review (if needed)')).toBeInTheDocument();
-      });
     });
 
     it('correctly maps APPROVED to Stage 4 of 4: Resolved', async () => {
@@ -344,7 +328,7 @@ describe('TrackGrievancePage', () => {
       });
     });
 
-    it('correctly maps REJECTED to Stage 4 of 4: Closed', async () => {
+    it('shows REJECTED as closed without a success check', async () => {
       const user = userEvent.setup();
       vi.mocked(trackGrievance).mockResolvedValueOnce({
         ...MOCK_TRACKING_RESPONSE,
@@ -359,28 +343,8 @@ describe('TrackGrievancePage', () => {
       await waitFor(() => {
         expect(screen.getByText('Stage 4 of 4: Closed')).toBeInTheDocument();
       });
-    });
-
-    it('correctly maps DISMISSED to Stage 4 of 4: Closed without a success check', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'DISMISSED',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 4 of 4: Closed')).toBeInTheDocument();
-      });
-      // Verify DISMISSED renders as Closed in status indicator and stepper
-      const closedElements = screen.getAllByText('Closed');
-      expect(closedElements.length).toBeGreaterThan(0);
-      // Verify no success check icon is rendered for step 4
       const step4 = screen.getByRole('list', { name: /complaint progress stepper/i }).querySelectorAll('li')[3];
+      expect(step4).toHaveTextContent('Closed');
       expect(step4?.querySelector('svg.lucide-check')).toBeNull();
     });
   });

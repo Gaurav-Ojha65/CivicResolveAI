@@ -12,6 +12,7 @@ import ai.civicresolve.backend.dto.ReviewRequest;
 import ai.civicresolve.backend.entity.Grievance;
 import ai.civicresolve.backend.entity.GrievanceStatus;
 import ai.civicresolve.backend.entity.TriagePriority;
+import ai.civicresolve.backend.exception.InvalidPaginationException;
 import ai.civicresolve.backend.exception.InvalidReviewStateException;
 import ai.civicresolve.backend.exception.StaleGrievanceVersionException;
 import ai.civicresolve.backend.repository.AuditLogRepository;
@@ -521,6 +522,54 @@ class GrievanceServiceTest {
         assertThat(status.activeModelName()).isEqualTo("baseline_tfidf_logreg");
         assertThat(status.demoBatchSeeded()).isTrue();
         assertThat(status.serverTimestamp()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("list rejects a negative page index before repository access")
+    void list_rejectsNegativePage() {
+        assertThatThrownBy(() -> grievanceService.list(null, null, null, -1, 20))
+                .isInstanceOf(InvalidPaginationException.class)
+                .hasMessage("Page index must be zero or greater.");
+    }
+
+    @Test
+    @DisplayName("list rejects a non-positive page size before repository access")
+    void list_rejectsNonPositivePageSize() {
+        assertThatThrownBy(() -> grievanceService.list(null, null, null, "query", 0, 0))
+                .isInstanceOf(InvalidPaginationException.class)
+                .hasMessage("Page size must be greater than zero.");
+    }
+
+    @Test
+    void list_rejectsOffsetsOutsideJpaRange() {
+        assertThatThrownBy(() -> grievanceService.list(null, null, null, Integer.MAX_VALUE, 20))
+                .isInstanceOf(InvalidPaginationException.class)
+                .hasMessage("Page index and size exceed the supported offset.");
+    }
+
+    @Test
+    @DisplayName("list preserves compatibility by clamping an oversized page to 100")
+    void list_clampsOversizedPageSize() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 100);
+        given(grievanceRepository.findAll(
+                eq(GrievanceStatus.PENDING_REVIEW),
+                eq(TriagePriority.HIGH),
+                eq("Debt collection"),
+                eq(pageable)))
+                .willReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+
+        grievanceService.list(
+                GrievanceStatus.PENDING_REVIEW,
+                TriagePriority.HIGH,
+                "Debt collection",
+                0,
+                500);
+
+        verify(grievanceRepository).findAll(
+                eq(GrievanceStatus.PENDING_REVIEW),
+                eq(TriagePriority.HIGH),
+                eq("Debt collection"),
+                eq(pageable));
     }
 
     @Test

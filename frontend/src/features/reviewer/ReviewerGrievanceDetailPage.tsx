@@ -45,35 +45,22 @@ import {
 } from '../../types/grievance';
 import { ApiError } from '../../lib/errors/api-error';
 
-function getSlaInfo(submittedAt: string, priority: TriagePriority) {
+function getCaseAgeInfo(submittedAt: string) {
   const submitTime = new Date(submittedAt).getTime();
   const now = Date.now();
-  const elapsedMs = Math.max(0, now - submitTime);
+  const elapsedMs = Number.isNaN(submitTime) ? 0 : Math.max(0, now - submitTime);
   const elapsedHours = elapsedMs / (1000 * 60 * 60);
-
-  let targetHours = 24; // CRITICAL
-  if (priority === 'HIGH') targetHours = 72;
-  else if (priority === 'MEDIUM') targetHours = 120; // 5 days
-  else if (priority === 'LOW') targetHours = 240; // 10 days
-
-  const remainingHours = targetHours - elapsedHours;
-  const isOverdue = remainingHours < 0;
 
   const days = Math.floor(elapsedHours / 24);
   const hours = Math.floor(elapsedHours % 24);
   const mins = Math.floor((elapsedHours * 60) % 60);
   const elapsedStr = days > 0 ? `${days}d ${hours}h` : `${hours}h ${mins}m`;
 
-  const absRemHours = Math.abs(remainingHours);
-  const remDays = Math.floor(absRemHours / 24);
-  const remH = Math.floor(absRemHours % 24);
-  const remStr = remDays > 0 ? `${remDays}d ${remH}h` : `${remH}h left`;
-
   return {
-    targetHours,
     elapsedStr,
-    remainingStr: isOverdue ? `${remDays > 0 ? `${remDays}d ` : ''}${remH}h overdue` : remStr,
-    isOverdue,
+    submittedLabel: Number.isNaN(submitTime)
+      ? 'Unknown submission time'
+      : new Date(submittedAt).toLocaleString(),
   };
 }
 
@@ -487,7 +474,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
     grievance.status === 'REJECTED' ||
     grievance.status === 'AUTO_ROUTED';
 
-  const sla = getSlaInfo(grievance.submittedAt, grievance.priority);
+  const caseAge = getCaseAgeInfo(grievance.submittedAt);
   const prediction = grievance.originalPrediction;
 
   // Review triggers
@@ -838,22 +825,16 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {/* SLA and Case Elapsed Info */}
+            {/* Case age is descriptive only; no legal or contractual deadline is configured. */}
             <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
               <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-                <span className="text-slate-400">Elapsed: </span>
-                <span className="font-bold text-slate-800 tabular-nums">{sla.elapsedStr}</span>
+                <span className="text-slate-400">Case age: </span>
+                <span className="font-bold text-slate-800 tabular-nums">{caseAge.elapsedStr}</span>
               </div>
 
-              <div
-                className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 ${
-                  sla.isOverdue
-                    ? 'bg-rose-50 border-rose-300 text-rose-900 font-bold'
-                    : 'bg-teal-50 border-teal-200 text-teal-900'
-                }`}
-              >
-                <Clock size={13} className={sla.isOverdue ? 'text-rose-600' : 'text-teal-600'} />
-                <span>Target: {sla.targetHours}h ({sla.remainingStr})</span>
+              <div className="px-3 py-1.5 rounded-xl border flex items-center gap-1.5 bg-slate-50 border-slate-200 text-slate-700">
+                <Clock size={13} className="text-slate-500" />
+                <span title={caseAge.submittedLabel}>No review deadline configured</span>
               </div>
             </div>
           </div>
@@ -914,7 +895,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
                     Version #{grievance.version}
                   </span>
                   <span className="bg-teal-50 text-teal-800 px-2.5 py-0.5 rounded-full border border-teal-200">
-                    SLA: {sla.remainingStr}
+                    Case age: {caseAge.elapsedStr}
                   </span>
                 </div>
               </div>

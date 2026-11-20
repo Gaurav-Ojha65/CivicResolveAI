@@ -6,10 +6,12 @@
  * 2. Discrete Integer Queue Physics: A_t, H_t, C_t, B_t in Z_>=0 (zero fractional complaints).
  * 3. 8-Class Probability Simplex Bound: P_1 - P_2 >= 2*P_1 - 1 (margin gate adds load iff tau_conf < (1 + tau_margin) / 2).
  * 4. Critical-Priority Safety Floor: CRITICAL_PRIORITY_POLICY mandates human review regardless of confidence.
- * 5. Three FIFO SLA Zones matching CivicResolve analytics:
- *    - On-Track (<24h wait): B_t <= mu_daily
- *    - At-Risk (24–72h wait): mu_daily < B_t <= 3 * mu_daily
- *    - SLA Breached (>72h wait): B_t > 3 * mu_daily
+ * 5. Three modeled FIFO backlog-capacity zones:
+ *    - Within daily capacity: B_t <= mu_daily
+ *    - Above daily capacity: mu_daily < B_t <= 3 * mu_daily
+ *    - Above three-day capacity: B_t > 3 * mu_daily
+ *
+ * These zones are simulation assumptions, not legal or contractual deadlines.
  */
 
 export interface ConfidenceBucketsInput {
@@ -64,13 +66,15 @@ export interface HistogramBin {
 export interface MonteCarloSummary {
   humanReviewRate: number; // 0 to 1
   autoRouteRate: number; // 0 to 1
-  dailyClearanceCapacity: number; // mu_daily (24h threshold in complaints)
-  breachCapacityThreshold: number; // 3 * mu_daily (72h threshold in complaints)
+  dailyClearanceCapacity: number; // mu_daily, expressed in complaints per day
+  breachCapacityThreshold: number; // 3 * mu_daily modeled capacity threshold
   medianDay14Backlog: number; // P50 at Day 14
   var95Backlog: number; // 95th percentile backlog at Day 14
   cvar95Backlog: number; // Expected Shortfall (CVaR 95)
   expectedPeakWaitHours: number; // (var95Backlog / mu_daily) * 24
   atRiskProbabilityPercent: number; // % of runs where peak backlog > mu_daily
+  // Legacy property name retained for compatibility. This is capacity exceedance,
+  // not a measured or legally configured SLA breach.
   slaBreachProbabilityPercent: number; // % of runs where peak backlog > 3 * mu_daily
   executionTimeMs: number;
 }
@@ -159,12 +163,12 @@ function sampleBinomial(n: number, p: number, prng: () => number): number {
  * Interpolates human review routing probability from live telemetry confidence & margin buckets.
  * Respects:
  * 1. Simplex inequality bound (P1 - P2 >= 2*P1 - 1).
- * 2. Critical-priority statutory safety floor (minimum 0.12 or empirical share).
+ * 2. Conservative critical-priority routing floor (minimum 0.12 or empirical share).
  */
 export function interpolateHumanReviewRate(config: MonteCarloConfig): number {
   const { confidenceGate, marginGate } = config;
 
-  // Critical-policy safety floor: statutory mandate routes CRITICAL complaints to humans
+  // Modeling assumption: route at least the configured critical share to human review.
   const criticalPolicyFloor = Math.max(0.12, config.criticalShare ?? 0.12);
 
   const buckets = config.confidenceBuckets ?? {
@@ -225,8 +229,8 @@ export function runMonteCarloSimulation(config: MonteCarloConfig): MonteCarloRes
 
   const reviewerCount = Math.max(1, config.reviewerCount);
   const reviewsPerReviewerPerDay = config.reviewsPerReviewerPerDay ?? 3;
-  const dailyClearanceCapacity = reviewerCount * reviewsPerReviewerPerDay; // mu_daily (24h threshold)
-  const breachCapacityThreshold = 3 * dailyClearanceCapacity; // 3 * mu_daily (72h threshold)
+  const dailyClearanceCapacity = reviewerCount * reviewsPerReviewerPerDay; // mu_daily
+  const breachCapacityThreshold = 3 * dailyClearanceCapacity; // modeled 3-day capacity
 
   const initialBacklog = Math.max(0, Math.round(config.initialBacklog ?? 8));
   const baseArrivals = Math.max(1, config.baseDailyArrivals ?? 25);
@@ -386,7 +390,8 @@ export function runMonteCarloSimulation(config: MonteCarloConfig): MonteCarloRes
 
 /**
  * Computes AI Policy Trade-off Frontier curve across 12 confidence gate thresholds in [0.35, 0.90].
- * Evaluates trade-off between Straight-Through Auto-Routing % and 72h SLA Breach Risk %.
+ * Evaluates the trade-off between straight-through auto-routing and the modeled
+ * probability that peak backlog exceeds three times daily clearance capacity.
  */
 export function computePolicyFrontier(baseConfig: MonteCarloConfig): PolicyFrontierPoint[] {
   const gates = [0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90];

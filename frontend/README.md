@@ -158,12 +158,13 @@ Implemented in `src/components/ui/`:
 
 ---
 
-## 9. Current Phase Scope Boundaries & Limitations
+## 9. Implemented Routes and Current Limitations
 
-In accordance with Phase 8.2 constraints:
-- **No Marketing Landing Page**: The root page is a Foundation & Design System Console.
-- **No Complaint Submission Form**: Endpoints and DTOs are wired, but full citizen form is scheduled for Phase 8.3.
-- **No Reviewer Queue Dashboard**: Table and filters are scheduled for Phase 8.4.
-- **No Grievance Detail Workspace**: Detailed triage screen is scheduled for Phase 8.4.
-- **No Backend Modifications**: Spring Boot and FastAPI codebases were not altered.
+- `/`, `/submit`, and `/track` provide the citizen landing, submission, and public tracking flows.
+- `/reviewer/login` authenticates the in-memory reviewer session.
+- `/reviewer` provides the backend-paginated reviewer queue with server-side filters and search.
+- `/reviewer/grievances/:id`, `/reviewer/audit`, and `/reviewer/analytics` provide case review, model audit, and operational analytics views.
+- Reviewer credentials remain in memory and are lost on refresh by design.
+- Queue-age bands are descriptive operational reporting only; the frontend does not claim a configured legal or contractual SLA.
+- The production deployment boundary, identity-provider integration, and distributed tracking rate limiting remain future infrastructure work.
 

@@ -8,9 +8,11 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
@@ -34,6 +36,24 @@ public class GlobalExceptionHandler {
     private static final URI NLP_TYPE = URI.create("https://civicresolve.ai/errors/nlp-service");
     private static final URI RATE_LIMIT_TYPE = URI.create("https://civicresolve.ai/errors/rate-limit-exceeded");
     private static final URI INTERNAL_TYPE = URI.create("https://civicresolve.ai/errors/internal");
+
+    @ExceptionHandler(InvalidPaginationException.class)
+    public ProblemDetail handleInvalidPagination(InvalidPaginationException ex) {
+        ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        pd.setType(VALIDATION_TYPE);
+        pd.setTitle("Invalid Pagination");
+        pd.setDetail(ex.getMessage());
+        return pd;
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        pd.setType(VALIDATION_TYPE);
+        pd.setTitle("Invalid Request Parameter");
+        pd.setDetail("Request parameter '" + ex.getName() + "' has an invalid value.");
+        return pd;
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
@@ -135,6 +155,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleNlpClientException(NlpClientService.NlpClientException ex) {
         HttpStatus status = switch (ex.getHttpStatus()) {
             case 400 -> HttpStatus.BAD_REQUEST;
+            case 404 -> HttpStatus.NOT_FOUND;
             case 502 -> HttpStatus.BAD_GATEWAY;
             case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
             case 504 -> HttpStatus.GATEWAY_TIMEOUT;
@@ -145,6 +166,11 @@ public class GlobalExceptionHandler {
         pd.setTitle("NLP Service Error");
         pd.setDetail(ex.getMessage());
         return pd;
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        return ex.getBody();
     }
 
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)

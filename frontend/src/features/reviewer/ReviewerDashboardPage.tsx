@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -34,6 +34,26 @@ import {
 } from '../../types/grievance';
 import { ApiError } from '../../lib/errors/api-error';
 
+type StatusFilter = 'ALL' | GrievanceStatus;
+type PriorityFilter = 'ALL' | TriagePriority;
+
+const STATUS_OPTIONS: ReadonlyArray<[StatusFilter, string]> = [
+  ['ALL', 'All Statuses'],
+  ['PENDING_REVIEW', 'Pending Review'],
+  ['AUTO_ROUTED', 'Auto-Routed'],
+  ['APPROVED', 'Approved'],
+  ['OVERRIDDEN', 'Overridden'],
+  ['REJECTED', 'Rejected'],
+];
+
+const PRIORITY_OPTIONS: ReadonlyArray<[PriorityFilter, string]> = [
+  ['ALL', 'All Priorities'],
+  ['CRITICAL', 'Critical'],
+  ['HIGH', 'High'],
+  ['MEDIUM', 'Medium'],
+  ['LOW', 'Low'],
+];
+
 const AnimatedKpiNumber: React.FC<{ value: number | string; className?: string }> = ({ value, className }) => {
   return (
     <AnimatePresence mode="popLayout" initial={false}>
@@ -51,63 +71,32 @@ const AnimatedKpiNumber: React.FC<{ value: number | string; className?: string }
   );
 };
 
-function getSlaDurationMs(priority: TriagePriority): number {
-  switch (priority) {
-    case 'CRITICAL':
-      return 24 * 60 * 60 * 1000;
-    case 'HIGH':
-      return 72 * 60 * 60 * 1000;
-    case 'MEDIUM':
-      return 5 * 24 * 60 * 60 * 1000;
-    case 'LOW':
-    default:
-      return 10 * 24 * 60 * 60 * 1000;
-  }
-}
-
-function getBreachTimestamp(grievance: GrievanceResponse): number {
+function renderCaseAge(grievance: GrievanceResponse) {
   const submitted = new Date(grievance.submittedAt).getTime();
-  return (isNaN(submitted) ? Date.now() : submitted) + getSlaDurationMs(grievance.priority);
-}
-
-function renderTimeToSla(grievance: GrievanceResponse) {
-  const submitted = new Date(grievance.submittedAt).getTime();
-  const slaDuration = getSlaDurationMs(grievance.priority);
-  const now = Date.now();
-  const elapsed = Math.max(0, now - (isNaN(submitted) ? now : submitted));
-  const remaining = slaDuration - elapsed;
-  const pct = Math.min(100, Math.max(0, Math.round((elapsed / slaDuration) * 100)));
-
-  if (remaining < 0) {
-    const overdueMs = Math.abs(remaining);
-    const daysOver = Math.floor(overdueMs / (1000 * 60 * 60 * 24));
-    const label = daysOver >= 1 ? `${daysOver} d over` : `${Math.max(1, Math.floor(overdueMs / (1000 * 60 * 60)))} h over`;
+  if (Number.isNaN(submitted)) {
     return (
-      <div className="flex items-center gap-2">
-        <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
-          <div className="h-full bg-red-500 rounded-full w-full" />
-        </div>
-        <span className="text-[11px] font-bold text-red-700 font-mono tabular-nums whitespace-nowrap">
-          {label}
-        </span>
-      </div>
+      <span className="text-[11px] font-medium text-slate-500 font-mono whitespace-nowrap">
+        Unknown
+      </span>
     );
   }
 
-  const daysLeft = Math.floor(remaining / (1000 * 60 * 60 * 24));
-  const hoursLeft = Math.max(1, Math.floor(remaining / (1000 * 60 * 60)));
-  const label = daysLeft >= 1 ? `${daysLeft} d left` : `${hoursLeft} h left`;
-  const railColor = pct > 75 ? 'bg-amber-500' : 'bg-teal-600';
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - submitted) / (1000 * 60)));
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  const label = elapsedDays > 0
+    ? `${elapsedDays}d ${elapsedHours % 24}h`
+    : elapsedHours > 0
+      ? `${elapsedHours}h ${elapsedMinutes % 60}m`
+      : `${elapsedMinutes}m`;
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
-        <div className={`h-full ${railColor} rounded-full`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[11px] font-medium text-slate-600 font-mono tabular-nums whitespace-nowrap">
-        {label}
-      </span>
-    </div>
+    <span
+      className="text-[11px] font-medium text-slate-600 font-mono tabular-nums whitespace-nowrap"
+      title={`Submitted ${new Date(grievance.submittedAt).toLocaleString()}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -123,12 +112,14 @@ export const ReviewerDashboardPage: React.FC = () => {
   const [pageData, setPageData] = useState<SpringPage<GrievanceResponse> | null>(null);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueRefresh, setQueueRefresh] = useState(0);
 
   // Filters & Search
   const [currentPage, setCurrentPage] = useState(0);
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
-  const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('ALL');
+  const [selectedPriority, setSelectedPriority] = useState<PriorityFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const searchTerm = searchQuery.trim();
 
   // Keyboard navigation row index
   const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
@@ -212,36 +203,6 @@ export const ReviewerDashboardPage: React.FC = () => {
     }
   }, []);
 
-  const fetchQueue = useCallback(
-    async (page: number, status: string, priority: string, signal?: AbortSignal) => {
-      setQueueLoading(true);
-      setQueueError(null);
-      try {
-        const data = await listGrievances(
-          {
-            page,
-            size: 20,
-            status: status === 'ALL' ? undefined : (status as GrievanceStatus),
-            priority: priority === 'ALL' ? undefined : (priority as TriagePriority),
-          },
-          signal
-        );
-        setPageData(data);
-        setLastRefreshedAt(new Date());
-        setSelectedRowIndex(0);
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setQueueError(err.message || `Failed to load queue (${err.status})`);
-        } else if (err instanceof Error && err.name !== 'AbortError') {
-          setQueueError(err.message);
-        }
-      } finally {
-        setQueueLoading(false);
-      }
-    },
-    []
-  );
-
   useEffect(() => {
     const controller = new AbortController();
     fetchStats(controller.signal);
@@ -250,21 +211,60 @@ export const ReviewerDashboardPage: React.FC = () => {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchQueue(currentPage, selectedStatus, selectedPriority, controller.signal);
+    const { signal } = controller;
+    setQueueLoading(true);
+    setQueueError(null);
+
+    async function fetchQueue() {
+      try {
+        const data = await listGrievances(
+          {
+            page: currentPage,
+            size: 20,
+            status: selectedStatus === 'ALL' ? undefined : selectedStatus,
+            priority: selectedPriority === 'ALL' ? undefined : selectedPriority,
+            search: searchTerm || undefined,
+          },
+          signal
+        );
+        if (signal.aborted) return;
+        if (data.empty && currentPage > 0 && currentPage >= data.totalPages) {
+          setPageData(null);
+          setCurrentPage(Math.max(0, data.totalPages - 1));
+          return;
+        }
+        setPageData(data);
+        setLastRefreshedAt(new Date());
+        setSelectedRowIndex(0);
+      } catch (err) {
+        if (signal.aborted) return;
+        if (err instanceof ApiError) {
+          setQueueError(err.message || `Failed to load queue (${err.status})`);
+        } else {
+          setQueueError(err instanceof Error ? err.message : 'Failed to load queue');
+        }
+      } finally {
+        if (!signal.aborted) setQueueLoading(false);
+      }
+    }
+
+    void fetchQueue();
     return () => controller.abort();
-  }, [currentPage, selectedStatus, selectedPriority, fetchQueue]);
+  }, [currentPage, selectedStatus, selectedPriority, searchTerm, queueRefresh]);
+
+  const refreshQueue = () => setQueueRefresh((previous) => previous + 1);
 
   const handleRefreshAll = () => {
     fetchStats();
-    fetchQueue(currentPage, selectedStatus, selectedPriority);
+    refreshQueue();
   };
 
-  const handleStatusFilterChange = (newStatus: string) => {
+  const handleStatusFilterChange = (newStatus: StatusFilter) => {
     setSelectedStatus(newStatus);
     setCurrentPage(0);
   };
 
-  const handlePriorityFilterChange = (newPriority: string) => {
+  const handlePriorityFilterChange = (newPriority: PriorityFilter) => {
     setSelectedPriority(newPriority);
     setCurrentPage(0);
   };
@@ -276,22 +276,13 @@ export const ReviewerDashboardPage: React.FC = () => {
     setCurrentPage(0);
   };
 
-  // Sort grievances by time to SLA breach (earliest breach first)
-  const sortedGrievances = useMemo(() => {
-    if (!pageData?.content) return [];
-    return [...pageData.content].sort((a, b) => getBreachTimestamp(a) - getBreachTimestamp(b));
-  }, [pageData?.content]);
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(0);
+  };
 
-  // Client-side text search over current page
-  const filteredGrievances = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return sortedGrievances;
-    return sortedGrievances.filter((g) => {
-      const matchId = g.id.toLowerCase().includes(q);
-      const matchCat = g.assignedCategory.toLowerCase().includes(q);
-      return matchId || matchCat;
-    });
-  }, [sortedGrievances, searchQuery]);
+  // The backend owns filtering, pagination, and ordering. Preserve its page order exactly.
+  const visibleGrievances = queueLoading || queueError ? [] : (pageData?.content ?? []);
 
   // Keyboard navigation handler (J / K / Enter / Space / Esc)
   useEffect(() => {
@@ -307,23 +298,23 @@ export const ReviewerDashboardPage: React.FC = () => {
 
       if (e.key === 'j' || e.key === 'J') {
         e.preventDefault();
-        setSelectedRowIndex((prev) => Math.min(Math.max(0, filteredGrievances.length - 1), prev + 1));
+        setSelectedRowIndex((prev) => Math.min(Math.max(0, visibleGrievances.length - 1), prev + 1));
       } else if (e.key === 'k' || e.key === 'K') {
         e.preventDefault();
         setSelectedRowIndex((prev) => Math.max(0, prev - 1));
       } else if (e.key === 'Enter') {
-        if (!expandedRowId && filteredGrievances[selectedRowIndex]) {
-          navigate(`/reviewer/grievances/${filteredGrievances[selectedRowIndex].id}`);
+        if (!expandedRowId && visibleGrievances[selectedRowIndex]) {
+          navigate(`/reviewer/grievances/${visibleGrievances[selectedRowIndex].id}`);
         }
       } else if (e.key === ' ') {
         e.preventDefault();
-        if (filteredGrievances[selectedRowIndex]) {
-          handleToggleQuickPeek(filteredGrievances[selectedRowIndex].id);
+        if (visibleGrievances[selectedRowIndex]) {
+          handleToggleQuickPeek(visibleGrievances[selectedRowIndex].id);
         }
       } else if (e.key === 'Escape') {
         if (expandedRowId) {
           setExpandedRowId(null);
-        } else if (selectedStatus !== 'ALL' || selectedPriority !== 'ALL' || searchQuery) {
+        } else if (selectedStatus !== 'ALL' || selectedPriority !== 'ALL' || searchTerm) {
           handleResetFilters();
         }
       }
@@ -331,12 +322,12 @@ export const ReviewerDashboardPage: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredGrievances, selectedRowIndex, expandedRowId, navigate, selectedStatus, selectedPriority, searchQuery]);
+  }, [visibleGrievances, selectedRowIndex, expandedRowId, navigate, selectedStatus, selectedPriority, searchTerm]);
 
   const minutesSinceRefresh = Math.max(0, Math.floor((Date.now() - lastRefreshedAt.getTime()) / 60000));
   const refreshText = minutesSinceRefresh === 0 ? 'Updated just now' : `Updated ${minutesSinceRefresh} min ago`;
 
-  const hasActiveFilters = selectedStatus !== 'ALL' || selectedPriority !== 'ALL' || Boolean(searchQuery.trim());
+  const hasActiveFilters = selectedStatus !== 'ALL' || selectedPriority !== 'ALL' || Boolean(searchTerm);
 
   return (
     <ReviewerLayout
@@ -489,7 +480,7 @@ export const ReviewerDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            {/* 4. SLA Risk */}
+            {/* 4. Critical Priority */}
             <div
               onClick={() => handlePriorityFilterChange('CRITICAL')}
               className="p-4 sm:p-5 flex flex-col justify-between hover:bg-red-50/40 transition-colors cursor-pointer group"
@@ -497,7 +488,7 @@ export const ReviewerDashboardPage: React.FC = () => {
             >
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-red-800 uppercase tracking-wider group-hover:text-red-900 transition-colors">
-                  SLA Risk
+                  Critical Priority
                 </p>
                 <div className="w-7 h-7 rounded-lg bg-red-50 text-red-800 border border-red-200 flex items-center justify-center">
                   <ShieldAlert size={14} />
@@ -505,13 +496,13 @@ export const ReviewerDashboardPage: React.FC = () => {
               </div>
               <div className="mt-2">
                 <AnimatedKpiNumber
-                  value={(stats.byPriority['CRITICAL'] || 0) + (stats.byPriority['HIGH'] || 0)}
+                  value={stats.byPriority['CRITICAL'] || 0}
                   className="text-2xl sm:text-3xl font-extrabold text-red-800 font-mono tabular-nums tracking-tight"
                 />
                 <p className="mt-1 text-xs text-red-800 flex items-center gap-1.5 tabular-nums">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-600 inline-block shrink-0" />
                   <span>
-                    Critical: {stats.byPriority['CRITICAL'] || 0} • High: {stats.byPriority['HIGH'] || 0}
+                    Across all complaints
                   </span>
                 </p>
               </div>
@@ -529,9 +520,11 @@ export const ReviewerDashboardPage: React.FC = () => {
                 <h2 className="text-sm font-bold text-slate-900 tracking-tight">
                   Complaint Review Queue
                 </h2>
-                <span className="text-xs text-slate-500 font-mono">
-                  ({filteredGrievances.length} cases shown)
-                </span>
+                {!queueLoading && !queueError && (
+                  <span className="text-xs text-slate-500 font-mono">
+                    ({visibleGrievances.length} cases shown)
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {/* Keyboard Shortcuts Hint */}
@@ -559,7 +552,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                   type="button"
                   onClick={handleResetFilters}
                   className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-                    selectedStatus === 'ALL' && selectedPriority === 'ALL' && !searchQuery
+                    !hasActiveFilters
                       ? 'bg-slate-900 text-white font-semibold shadow-2xs'
                       : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                   }`}
@@ -615,15 +608,15 @@ export const ReviewerDashboardPage: React.FC = () => {
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Filter complaints by category or ID..."
+                  placeholder="Search by category or ID prefix…"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="w-full pl-8 pr-8 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors"
                 />
                 {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => handleSearchChange('')}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
                     <X size={13} />
@@ -635,29 +628,26 @@ export const ReviewerDashboardPage: React.FC = () => {
               <select
                 aria-label="Filter by Status"
                 value={selectedStatus}
-                onChange={(e) => handleStatusFilterChange(e.target.value)}
+                onChange={(event) => {
+                  const option = STATUS_OPTIONS.find(([value]) => value === event.currentTarget.value);
+                  if (option) handleStatusFilterChange(option[0]);
+                }}
                 className="min-w-[130px] text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors cursor-pointer"
               >
-                <option value="ALL">All Statuses</option>
-                <option value="PENDING_REVIEW">Pending Review</option>
-                <option value="AUTO_ROUTED">Auto-Routed</option>
-                <option value="APPROVED">Approved</option>
-                <option value="OVERRIDDEN">Overridden</option>
-                <option value="REJECTED">Rejected</option>
+                {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
 
               {/* Priority Select Dropdown (Preserves existing ARIA label & tests) */}
               <select
                 aria-label="Filter by Priority"
                 value={selectedPriority}
-                onChange={(e) => handlePriorityFilterChange(e.target.value)}
+                onChange={(event) => {
+                  const option = PRIORITY_OPTIONS.find(([value]) => value === event.currentTarget.value);
+                  if (option) handlePriorityFilterChange(option[0]);
+                }}
                 className="min-w-[130px] text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors cursor-pointer"
               >
-                <option value="ALL">All Priorities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
+                {PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
 
               {/* Reset Filters Button */}
@@ -697,10 +687,10 @@ export const ReviewerDashboardPage: React.FC = () => {
                 <ErrorState
                   title="Failed to load queue"
                   message={queueError}
-                  onRetry={() => fetchQueue(currentPage, selectedStatus, selectedPriority)}
+                  onRetry={refreshQueue}
                 />
               </div>
-            ) : !pageData || filteredGrievances.length === 0 ? (
+            ) : !pageData || visibleGrievances.length === 0 ? (
               <div className="p-8">
                 <EmptyState
                   title="No grievances match the filter criteria"
@@ -735,7 +725,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                           Priority
                         </th>
                         <th scope="col" className="py-2 px-3 w-36">
-                          Time to SLA
+                          Case age
                         </th>
                         <th scope="col" className="py-2 px-3 w-24">
                           Models
@@ -749,7 +739,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="block md:table-row-group divide-y-0 md:divide-y md:divide-slate-100 space-y-3 md:space-y-0 p-3 md:p-0">
-                      {filteredGrievances.map((grievance, idx) => {
+                      {visibleGrievances.map((grievance, idx) => {
                         const isSelected = selectedRowIndex === idx;
                         const isExpanded = expandedRowId === grievance.id;
 
@@ -806,9 +796,9 @@ export const ReviewerDashboardPage: React.FC = () => {
                               <StatusIndicator priority={grievance.priority} size="sm" />
                             </td>
 
-                            {/* 4. Time to SLA (Mobile: Row 3 Left) */}
+                            {/* 4. Case age (Mobile: Row 3 Left) */}
                             <td className="order-4 md:order-none col-span-1 md:col-auto flex items-center md:table-cell py-0 md:py-1.5 px-0 md:px-3">
-                              {renderTimeToSla(grievance)}
+                              {renderCaseAge(grievance)}
                             </td>
 
                             {/* 5. Models (Mobile: Row 4 Left) */}
@@ -884,10 +874,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                     </span>{' '}
                     to{' '}
                     <span className="font-semibold text-slate-900">
-                      {Math.min(
-                        (pageData.number + 1) * pageData.size,
-                        pageData.totalElements
-                      )}
+                      {pageData.number * pageData.size + visibleGrievances.length}
                     </span>{' '}
                     of{' '}
                     <span className="font-semibold text-slate-900">

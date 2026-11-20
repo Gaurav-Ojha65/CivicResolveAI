@@ -13,6 +13,10 @@ public record ExecutiveAnalyticsResponse(
         long autoRouted,
         long humanReviewed,
         double autoRoutingEfficiencyRate,
+        /**
+         * Legacy API field retained for compatibility. It is the share of pending cases in the
+         * youngest fixed age band, not a configured or legally verified SLA compliance measure.
+         */
         double slaComplianceRate,
         Map<String, Long> priorityDistribution,
         Map<String, Long> statusDistribution,
@@ -54,6 +58,7 @@ public record ExecutiveAnalyticsResponse(
             long humanReviewedCount
     ) {}
 
+    /** Legacy type name retained for API compatibility; values are fixed operational age bands. */
     public record SlaAgingBreakdown(
             long onTrack,
             long atRisk,
