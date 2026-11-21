@@ -10,6 +10,8 @@ import ai.civicresolve.backend.repository.AuditLogRepository;
 import ai.civicresolve.backend.repository.GrievanceRepository;
 import ai.civicresolve.backend.repository.GrievanceTrackingCredentialRepository;
 import ai.civicresolve.backend.repository.PredictionRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,8 +52,11 @@ public class DemoDataSeederService {
     private final TrackingCryptoService trackingCryptoService;
     private final Clock clock;
 
-    @Value("${civicresolve.demo.seeding-enabled:true}")
-    private boolean seedingEnabled = true;
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Value("${civicresolve.demo.seeding-enabled:false}")
+    private boolean seedingEnabled;
 
     private static final String MODEL_USED = "baseline_tfidf_logreg";
     private static final String MODEL_VERSION = "7a9964e0ef15514dfe3a561977b7da7826209042799a6ca2a11b7f04d9c80bc0";
@@ -138,18 +143,26 @@ public class DemoDataSeederService {
                     ("civicresolve-synthetic-demo-" + i).getBytes(StandardCharsets.UTF_8));
             Instant submittedAt = now.minus(Duration.ofDays(t.daysAgo())).minus(Duration.ofHours(t.hoursAgo()));
 
-            // 1. Create and save Grievance with deterministic UUID & [SYNTHETIC DEMO] tag
-            Grievance grievance = new Grievance(
-                    "[SYNTHETIC DEMO] " + t.narrative(),
-                    t.category(),
-                    t.priority(),
-                    t.status(),
-                    t.flagForReview()
-            );
-            grievance.setId(deterministicId);
-            grievance.setSubmittedAt(submittedAt);
-            grievance.setUpdatedAt(t.status() == GrievanceStatus.PENDING_REVIEW ? submittedAt : submittedAt.plus(Duration.ofHours(2)));
-            grievance = grievanceRepository.save(grievance);
+            // The normal entity mapping generates UUIDs. Insert this demo-only, assigned UUID
+            // directly, then load a managed entity for the related JPA writes.
+            Instant updatedAt = t.status() == GrievanceStatus.PENDING_REVIEW
+                    ? submittedAt : submittedAt.plus(Duration.ofHours(2));
+            entityManager.createNativeQuery("""
+                    INSERT INTO grievances (id, narrative, assigned_category, priority, status,
+                                            review_required, submitted_at, updated_at, version)
+                    VALUES (:id, :narrative, :category, :priority, :status,
+                            :reviewRequired, :submittedAt, :updatedAt, 0)
+                    """)
+                    .setParameter("id", deterministicId)
+                    .setParameter("narrative", "[SYNTHETIC DEMO] " + t.narrative())
+                    .setParameter("category", t.category())
+                    .setParameter("priority", t.priority().name())
+                    .setParameter("status", t.status().name())
+                    .setParameter("reviewRequired", t.flagForReview())
+                    .setParameter("submittedAt", submittedAt)
+                    .setParameter("updatedAt", updatedAt)
+                    .executeUpdate();
+            Grievance grievance = entityManager.find(Grievance.class, deterministicId);
 
             // 2. Probabilities map
             Map<String, Double> probs = new LinkedHashMap<>();
