@@ -252,7 +252,7 @@ describe('ReviewerGrievanceDetailPage', () => {
     // Verify 409 conflict alert is shown
     await waitFor(() => {
       expect(
-        screen.getByText(/conflict \(http 409\): another reviewer has updated this grievance/i)
+        screen.getByText(/another reviewer updated this case/i)
       ).toBeInTheDocument();
     });
 
@@ -266,6 +266,16 @@ describe('ReviewerGrievanceDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('v3')).toBeInTheDocument();
     });
+  });
+
+  it('allows discretionary review of an auto-routed case and leaves experiments collapsed', async () => {
+    vi.mocked(endpoints.getGrievanceById).mockResolvedValueOnce({
+      ...MOCK_DETAIL, status: 'AUTO_ROUTED', reviewRequired: false,
+    });
+    renderDetailPage();
+    expect(await screen.findByRole('button', { name: /approve grievance/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /supporting analysis/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /what-if sandbox/i })).not.toBeInTheDocument();
   });
 
   it('displays locked adjudication state for terminal status', async () => {
@@ -323,6 +333,7 @@ describe('ReviewerGrievanceDetailPage', () => {
 
       renderDetailPage();
 
+      await user.click(await screen.findByRole('button', { name: /supporting analysis and simulations/i }));
       // Wait for XAI attribution and bar chart to render
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /attribution token: escrow/i })).toBeInTheDocument();
@@ -426,6 +437,7 @@ describe('ReviewerGrievanceDetailPage', () => {
         expect(screen.getAllByText(/Detailed grievance documentation:/i).length).toBeGreaterThanOrEqual(1);
       });
 
+      await user.click(screen.getByRole('button', { name: /supporting analysis and simulations/i }));
       const escrowToken = screen.getByRole('button', { name: /attribution token: escrow/i });
       expect(escrowToken).toHaveAttribute('tabIndex', '0');
 

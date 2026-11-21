@@ -184,7 +184,7 @@ describe('DecisionIntelligenceLab Component', () => {
     expect(screen.getAllByText(/Top-2 Probability Margin \(P₁ - P₂\):/i).length).toBeGreaterThan(0);
 
     // Check provenance badge
-    expect(screen.getByText(/PROVENANCE VERIFIED: Active Production Checkpoint/i)).toBeInTheDocument();
+    expect(screen.getByText(/Model versions match/i)).toBeInTheDocument();
 
     // Check category flip indicator
     expect(screen.getAllByText(/Mortgage/i).length).toBeGreaterThan(0);
@@ -194,6 +194,17 @@ describe('DecisionIntelligenceLab Component', () => {
     expect(
       screen.getByText(/Uncalibrated model probability estimates. Stateless simulation—never written to PostgreSQL./i)
     ).toBeInTheDocument();
+  });
+
+  it('identifies missing original evidence and clears stale results when narrative changes', async () => {
+    vi.mocked(endpoints.compareModels).mockResolvedValueOnce(MOCK_DUAL_COMPARISON);
+    render(<DecisionIntelligenceLab originalNarrative={MOCK_ORIGINAL_NARRATIVE} originalPrediction={null} grievanceId="example" onAppendReviewNote={onAppendReviewNoteMock} />);
+    fireEvent.click(screen.getByRole('button', {name: /Compare Models & Run Replay/i}));
+    expect(await screen.findByText('Model version unavailable')).toBeVisible();
+    expect(screen.getAllByText('Original value unavailable')).toHaveLength(2);
+    expect(screen.getByText('Original category unavailable')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Simulation narrative'), {target: {value: 'An edited narrative without a prediction.'}});
+    expect(screen.queryByRole('button', {name: /Copy Replay Summary/})).not.toBeInTheDocument();
   });
 
   it('clicking "Copy Replay Summary to Review Note" only appends text to note callback and never triggers review API', async () => {

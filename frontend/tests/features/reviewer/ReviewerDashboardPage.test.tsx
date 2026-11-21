@@ -146,7 +146,7 @@ describe('ReviewerDashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByText('42')).toBeInTheDocument();
       expect(screen.getAllByText('12').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('18').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: /auto-routed/i })).toHaveTextContent(String(MOCK_STATS.byStatus.AUTO_ROUTED));
     });
 
     // Verify table row
@@ -202,6 +202,9 @@ describe('ReviewerDashboardPage', () => {
     await screen.findByText('Mortgage');
     const input = screen.getByPlaceholderText(/category or id/i);
     fireEvent.change(input, { target: { value: 'Mortgage' } });
+    await waitFor(() => expect(endpoints.listGrievances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: 'Mortgage' }), expect.any(AbortSignal)
+    ));
     const oldSignal = vi.mocked(endpoints.listGrievances).mock.lastCall?.[1];
     fireEvent.change(input, { target: { value: 'credit' } });
 
@@ -210,6 +213,42 @@ describe('ReviewerDashboardPage', () => {
     await act(async () => resolveSuperseded(MOCK_PAGE));
     expect(screen.getByText('Credit card')).toBeInTheDocument();
     expect(screen.queryByText('Mortgage')).not.toBeInTheDocument();
+  });
+
+  it('coalesces consecutive edits into one server search', async () => {
+    renderDashboard();
+    await screen.findByText('Mortgage');
+    vi.mocked(endpoints.listGrievances).mockClear();
+    const input = screen.getByRole('searchbox');
+    fireEvent.change(input, { target: { value: 'mo' } });
+    fireEvent.change(input, { target: { value: 'mort' } });
+    expect(endpoints.listGrievances).not.toHaveBeenCalled();
+    await waitFor(() => expect(endpoints.listGrievances).toHaveBeenCalledTimes(1));
+    expect(endpoints.listGrievances).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'mort', page: 0 }), expect.any(AbortSignal)
+    );
+  });
+
+  it('reports missing service measurements and unsuccessful probes accurately', async () => {
+    vi.mocked(endpoints.getSystemStatus).mockResolvedValueOnce({
+      backendStatus: 'UP', databaseSchemaVersion: 'UNKNOWN', nlpServiceReachable: false,
+      nlpProbeLatencyMs: 0, activeModelName: '', serverTimestamp: '', demoBatchSeeded: false,
+    });
+    renderDashboard();
+    const service = await screen.findByRole('region', { name: 'Service status' });
+    expect(await within(service).findByText('Unreachable')).toBeInTheDocument();
+    expect(within(service).getByText('Unavailable')).toBeInTheDocument();
+    expect(service).not.toHaveTextContent(/V8|12\s*ms|0\s*ms/);
+  });
+
+  it('retries a failed preview without closing the dialog', async () => {
+    vi.mocked(endpoints.getGrievanceById).mockRejectedValueOnce(new Error('Case unavailable'));
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(await screen.findByRole('button', { name: /quick peek/i }));
+    await user.click(await screen.findByRole('button', { name: /retry/i }));
+    expect(await screen.findByTestId('quick-peek-content')).toBeInTheDocument();
+    expect(endpoints.getGrievanceById).toHaveBeenCalledTimes(2);
   });
 
   it('offers only status and priority filters supported by the API', async () => {
@@ -225,8 +264,7 @@ describe('ReviewerDashboardPage', () => {
     const user = userEvent.setup();
     renderDashboard();
 
-    const label = await screen.findByText('Critical Priority');
-    const card = label.closest<HTMLElement>('div.cursor-pointer');
+    const card = await screen.findByRole('button', { name: /critical priority/i });
     expect(card).not.toBeNull();
     expect(within(card!).getByText('5')).toBeInTheDocument();
 
@@ -257,7 +295,7 @@ describe('ReviewerDashboardPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/no grievances match the filter criteria/i)
+        screen.getByText(/no complaints yet/i)
       ).toBeInTheDocument();
     });
   });
@@ -363,7 +401,7 @@ describe('ReviewerDashboardPage', () => {
 
     await user.click(quickPeekBtn);
 
-    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('12345678-abcd-1234-abcd-1234567890ab');
+    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('12345678-abcd-1234-abcd-1234567890ab', expect.any(AbortSignal));
 
     await waitFor(() => {
       expect(screen.getByTestId('quick-peek-content')).toBeInTheDocument();
@@ -374,7 +412,7 @@ describe('ReviewerDashboardPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('+escrow')).toBeInTheDocument();
     expect(screen.getByText('collection')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /open investigation lab/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^open case$/i })).toHaveAttribute(
       'href',
       '/reviewer/grievances/12345678-abcd-1234-abcd-1234567890ab'
     );

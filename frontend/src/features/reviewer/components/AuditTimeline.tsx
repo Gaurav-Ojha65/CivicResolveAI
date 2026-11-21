@@ -12,11 +12,9 @@ interface AuditTimelineProps {
 export const AuditTimeline: React.FC<AuditTimelineProps> = ({
   auditHistory = [],
   submittedAt,
-  initialPriority,
-  initialCategory,
 }) => {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-4">
+    <div className="break-words bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-4">
       <div className="flex items-center justify-between pb-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
@@ -24,25 +22,25 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({
           </div>
           <div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Immutable Case Audit Trail
+              Case audit history
             </h3>
             <p className="text-[11px] text-slate-500">
-              Cryptographically verified chronological transition events.
+              Actions recorded for this complaint.
             </p>
           </div>
         </div>
 
-        <span className="text-[11px] font-mono text-slate-400">
+        <span className="text-[11px] font-mono text-slate-600">
           {auditHistory.length} event{auditHistory.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {auditHistory.length === 0 ? (
-        <div className="py-6 text-center text-xs text-slate-400 italic space-y-1">
-          <p>Initial automated intake recorded.</p>
+        <div className="py-6 text-center text-xs text-slate-600 italic space-y-1">
+          <p>No audit events were returned.</p>
           {submittedAt && (
-            <p className="text-[10px] text-slate-400 font-mono">
-              Submitted: {new Date(submittedAt).toLocaleString()} ({initialCategory || 'Auto'} &bull; {initialPriority || 'P'})
+            <p className="text-[10px] text-slate-600 font-mono">
+              Submitted {new Date(submittedAt).toLocaleString()}
             </p>
           )}
         </div>
@@ -85,7 +83,7 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({
                     </span>
                   </div>
 
-                  <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                  <span className="text-[10px] text-slate-600 font-mono flex items-center gap-1">
                     <Clock size={10} />
                     {new Date(item.timestamp).toLocaleString()}
                   </span>
@@ -95,7 +93,7 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({
                 {(item.previousStatus || item.newStatus) && (
                   <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-600">
                     <span>{item.previousStatus || '—'}</span>
-                    <ArrowRight size={10} className="text-slate-400" />
+                    <ArrowRight size={10} className="text-slate-600" />
                     <span className="font-bold text-slate-900">{item.newStatus}</span>
                   </div>
                 )}
@@ -103,7 +101,7 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({
                 {/* Category changes */}
                 {(item.previousCategory || item.newCategory) && (
                   <div className="text-[11px] text-slate-600">
-                    <span className="text-slate-400">Category: </span>
+                    <span className="text-slate-600">Category: </span>
                     <span className="font-medium text-slate-800">
                       {item.previousCategory ? `${item.previousCategory} → ` : ''}
                       {item.newCategory}
@@ -114,7 +112,7 @@ export const AuditTimeline: React.FC<AuditTimelineProps> = ({
                 {/* Priority changes */}
                 {(item.previousPriority || item.newPriority) && (
                   <div className="text-[11px] text-slate-600">
-                    <span className="text-slate-400">Priority: </span>
+                    <span className="text-slate-600">Priority: </span>
                     <span className="font-medium text-slate-800">
                       {item.previousPriority ? `${item.previousPriority} → ` : ''}
                       {item.newPriority}

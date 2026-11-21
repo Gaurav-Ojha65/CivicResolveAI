@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { motion, type Variants } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Sparkles,
   RotateCcw,
@@ -29,52 +28,28 @@ interface DecisionIntelligenceLabProps {
   onAppendReviewNote: (text: string) => void;
 }
 
-const tokenContainerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.03, // 30ms delay per token
-    },
-  },
-};
-
-const tokenItemVariants: Variants = {
-  hidden: { opacity: 0, y: 4, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: 'spring' as const, stiffness: 400, damping: 25 },
-  },
-};
-
 export const SYNTHETIC_PRESETS = [
   {
     id: 'mortgage_foreclosure',
     title: 'Critical Mortgage Foreclosure',
-    badge: 'SYNTHETIC DEMO SCENARIO — NOT SAVED',
     text:
       'URGENT: Received an immediate Notice of Default and pending Trustee Sale date scheduled for next Tuesday on my primary mortgage. I submitted a complete loan modification packet under the loss mitigation rules 45 days ago, but the loan servicer continues dual-tracking foreclosure proceedings and refused to acknowledge receipt of documents, threatening imminent eviction.',
   },
   {
     id: 'debt_vs_card',
     title: 'Ambiguous Debt vs Credit Card',
-    badge: 'SYNTHETIC DEMO SCENARIO — NOT SAVED',
     text:
       'A collection agency has placed an outstanding charge of $1,850 on my credit file citing an unpaid balance from a store credit card opened six years ago. When I demanded formal debt validation under FDCPA, they sent a generic printout without original account agreements or itemized interest charges, while simultaneously calling my workplace multiple times daily.',
   },
   {
     id: 'credit_reporting',
     title: 'Credit Reporting Dispute',
-    badge: 'SYNTHETIC DEMO SCENARIO — NOT SAVED',
     text:
       'I formally submitted certified dispute letters to all three nationwide credit reporting bureaus regarding an erroneous delinquent auto loan account that belongs to an individual with a similar name and SSN. Despite enclosing government ID and police reports proving identity theft, the bureau marked the dispute as verified without performing a reasonable investigation.',
   },
   {
     id: 'unauthorized_transactions',
     title: 'Unauthorized Card Transactions',
-    badge: 'SYNTHETIC DEMO SCENARIO — NOT SAVED',
     text:
       'Discovered eight separate unauthorized debit and credit card charges totaling $2,430 billed from an overseas merchant while traveling domestically. I immediately notified my bank within 24 hours to freeze the card and dispute under Regulation E/Z, but the bank denied the provisional credit claim asserting that the card chip was authenticated.',
   },
@@ -86,7 +61,7 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
   grievanceId,
   onAppendReviewNote,
 }) => {
-  const [activeTab, setActiveTab] = useState<'whatif' | 'precedents' | 'arena'>('whatif');
+  const [activeTab, setActiveTab] = useState<'whatif' | 'precedents'>('whatif');
   const [simulatedText, setSimulatedText] = useState<string>(originalNarrative);
   const [comparison, setComparison] = useState<DualModelComparisonResponse | null>(null);
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
@@ -102,17 +77,24 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
   const simCharCount = simulatedText.length;
   const charDelta = simCharCount - origCharCount;
 
-  const handleReset = () => {
-    setSimulatedText(originalNarrative);
+  const replayRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => replayRequest.current?.abort(), []);
+
+  const updateNarrative = (text: string) => {
+    replayRequest.current?.abort();
+    setSimulatedText(text);
     setComparison(null);
     setReplayError(null);
+    setCopiedNote(false);
+    setIsReplaying(false);
+  };
+  const handleReset = () => {
+    updateNarrative(originalNarrative);
   };
 
   const handleApplyPreset = (presetText: string) => {
     // STRICT RULE: Only populates editor text — never fabricates predictions or saves data
-    setSimulatedText(presetText);
-    setComparison(null);
-    setReplayError(null);
+    updateNarrative(presetText);
   };
 
   const handleRunReplay = async () => {
@@ -127,15 +109,19 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
     }
 
     setReplayError(null);
+    replayRequest.current?.abort();
+    const controller = new AbortController();
+    replayRequest.current = controller;
     setIsReplaying(true);
 
     try {
-      const res = await compareModels(trimmed);
-      setComparison(res);
+      const res = await compareModels(trimmed, controller.signal);
+      if (!controller.signal.aborted) setComparison(res);
     } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       setReplayError((err as Error).message || 'Replay simulation failed. Ensure NLP service is reachable.');
     } finally {
-      setIsReplaying(false);
+      if (!controller.signal.aborted) setIsReplaying(false);
     }
   };
 
@@ -159,55 +145,47 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
   };
 
   // Deltas against Zone A
-  const origCategory = originalPrediction?.predictedCategory || 'N/A';
+  const origCategory = originalPrediction?.predictedCategory;
   const simBaselineCategory = comparison?.baseline.predicted_category;
   const isCategoryFlipped = simBaselineCategory && simBaselineCategory !== origCategory;
 
-  const origConf = originalPrediction?.confidence ?? 0;
-  const simConf = comparison?.baseline.confidence ?? 0;
-  const confDelta = comparison ? simConf - origConf : 0;
-
-  const origMargin = originalPrediction?.margin ?? 0;
-  const simMargin = comparison?.baseline.margin ?? 0;
-  const marginDelta = comparison ? simMargin - origMargin : 0;
-
+  const confDelta = comparison && originalPrediction ? (comparison.baseline.confidence - originalPrediction.confidence) * 100 : null;
+  const marginDelta = comparison && originalPrediction ? (comparison.baseline.margin - originalPrediction.margin) * 100 : null;
   // Provenance consistency check
   const origModelVersion = originalPrediction?.modelVersion;
   const liveModelHash = comparison?.baseline.model_version_sha256;
-  const isProvenanceMatch = !origModelVersion || !liveModelHash || origModelVersion === liveModelHash;
+  const isProvenanceMatch = origModelVersion && liveModelHash ? origModelVersion === liveModelHash : null;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
       {/* Lab Header */}
-      <div className="p-5 border-b border-slate-100 bg-linear-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="p-5 border-b border-slate-100 bg-canvas text-ink flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/30 text-teal-300 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-teal-50 border border-line text-teal-trust flex items-center justify-center">
             <Sparkles size={19} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-extrabold tracking-tight text-white uppercase font-mono">
+              <h2 className="text-base font-semibold tracking-tight text-ink">
                 CivicResolve Decision Intelligence Lab
               </h2>
-              <Badge variant="default" size="sm" className="bg-teal-500/20 text-teal-200 border-teal-400/30 font-mono text-[10px]">
-                FLAGSHIP SUITE
-              </Badge>
             </div>
-            <p className="text-[11px] text-slate-300">
-              Counterfactual Case Replay &amp; Decision Consistency Workspace.
+            <p className="text-sm text-ink-muted">
+              Compare model responses to edited text or inspect similar cases.
             </p>
           </div>
         </div>
 
         {/* Tab View Switcher */}
-        <div className="inline-flex p-1 bg-slate-800/90 rounded-xl border border-slate-700/80 text-xs font-medium">
+        <div className="inline-flex p-1 bg-white rounded-lg border border-line text-xs font-medium">
           <button
             type="button"
+            aria-pressed={activeTab === 'whatif'}
             onClick={() => setActiveTab('whatif')}
             className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
               activeTab === 'whatif'
-                ? 'bg-teal-600 text-white font-bold shadow-xs'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-teal-trust text-white font-semibold shadow-xs'
+                : 'text-ink-muted hover:text-ink'
             }`}
           >
             <Sparkles size={13} />
@@ -215,11 +193,12 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
           </button>
           <button
             type="button"
+            aria-pressed={activeTab === 'precedents'}
             onClick={() => setActiveTab('precedents')}
             className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
               activeTab === 'precedents'
-                ? 'bg-teal-600 text-white font-bold shadow-xs'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-teal-trust text-white font-semibold shadow-xs'
+                : 'text-ink-muted hover:text-ink'
             }`}
           >
             <Scale size={13} />
@@ -239,11 +218,11 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">
                     Zone B — Counterfactual Narrative Editor
                   </h3>
-                  <Badge variant="warning" size="sm" className="text-[10px]">
+                  <Badge variant="warning" size="sm" className="text-xs">
                     Stateless Simulation
                   </Badge>
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-slate-500">
                   Edit complaint details or load synthetic stress-test scenarios to evaluate model sensitivity.
                 </p>
               </div>
@@ -252,13 +231,13 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
               <div className="flex items-center gap-2 font-mono text-xs">
                 <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg">
                   Words: {simWordCount}{' '}
-                  <span className={wordDelta > 0 ? 'text-teal-700 font-bold' : wordDelta < 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}>
+                  <span className={wordDelta > 0 ? 'text-teal-700 font-bold' : wordDelta < 0 ? 'text-rose-700 font-bold' : 'text-slate-600'}>
                     ({wordDelta >= 0 ? `+${wordDelta}` : wordDelta})
                   </span>
                 </span>
                 <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg">
                   Chars: {simCharCount}{' '}
-                  <span className={charDelta > 0 ? 'text-teal-700 font-bold' : charDelta < 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}>
+                  <span className={charDelta > 0 ? 'text-teal-700 font-bold' : charDelta < 0 ? 'text-rose-700 font-bold' : 'text-slate-600'}>
                     ({charDelta >= 0 ? `+${charDelta}` : charDelta})
                   </span>
                 </span>
@@ -267,8 +246,8 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
 
             {/* Synthetic Demo Presets (visibly badged as synthetic / not saved) */}
             <div>
-              <div className="text-[11px] font-semibold text-slate-500 mb-1.5 flex items-center gap-1.5">
-                <Layers size={13} className="text-slate-400" />
+              <div className="text-xs font-semibold text-slate-500 mb-1.5 flex items-center gap-1.5">
+                <Layers size={13} className="text-slate-600" />
                 <span>Synthetic Demo Stress Presets:</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -295,63 +274,59 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
               ((originalPrediction.explanation.topPositiveFeatures && originalPrediction.explanation.topPositiveFeatures.length > 0) ||
                (originalPrediction.explanation.topNegativeFeatures && originalPrediction.explanation.topNegativeFeatures.length > 0)) && (
                 <div className="space-y-1.5 p-3 bg-slate-50/80 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
                     <span className="flex items-center gap-1.5">
                       <Scale size={13} className="text-teal-700" />
                       TF-IDF Linear Attribution Tokens
                     </span>
-                    <span className="text-slate-400 font-mono text-[10px]">
+                    <span className="text-slate-600 font-mono text-xs">
                       {originalPrediction.explanation.predictedClass} Drivers
                     </span>
                   </div>
-                  <motion.div
-                    variants={tokenContainerVariants}
-                    initial="hidden"
-                    animate="visible"
+                  <div
                     className="flex flex-wrap items-center gap-1.5"
                   >
                     {originalPrediction.explanation.topPositiveFeatures?.slice(0, 6).map((feat, idx) => (
-                      <motion.span
+                      <span
                         key={`lab-pos-${idx}-${feat.feature}`}
-                        variants={tokenItemVariants}
                         title={`Contribution: +${feat.contribution.toFixed(4)}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs tabular-nums"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs tabular-nums"
                       >
                         <span>+{feat.feature}</span>
-                        <span className="text-[10px] text-teal-600 font-bold opacity-80">
+                        <span className="text-xs text-teal-600 font-bold opacity-80">
                           {feat.contribution > 0 ? `+${feat.contribution.toFixed(2)}` : feat.contribution.toFixed(2)}
                         </span>
-                      </motion.span>
+                      </span>
                     ))}
                     {originalPrediction.explanation.topNegativeFeatures?.slice(0, 4).map((feat, idx) => (
-                      <motion.span
+                      <span
                         key={`lab-neg-${idx}-${feat.feature}`}
-                        variants={tokenItemVariants}
                         title={`Contribution: ${feat.contribution.toFixed(4)}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs tabular-nums"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs tabular-nums"
                       >
                         <span>{feat.feature}</span>
-                        <span className="text-[10px] text-rose-600 font-bold opacity-80">
+                        <span className="text-xs text-rose-600 font-bold opacity-80">
                           {feat.contribution.toFixed(2)}
                         </span>
-                      </motion.span>
+                      </span>
                     ))}
-                  </motion.div>
+                  </div>
                 </div>
               )
             )}
 
             {/* Editable Textarea */}
             <div className="space-y-1.5">
+              <label htmlFor="counterfactual-editor" className="block text-sm font-semibold text-ink">Simulation narrative</label>
               <textarea
                 id="counterfactual-editor"
                 rows={5}
                 value={simulatedText}
-                onChange={(e) => setSimulatedText(e.target.value)}
+                onChange={(e) => updateNarrative(e.target.value)}
                 placeholder="Enter counterfactual narrative to test sensitivity..."
                 className="w-full text-xs font-sans rounded-xl border border-slate-300 bg-white p-3.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-600 shadow-2xs"
               />
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>Valid input range: 10 to 10,000 characters.</span>
                 <span className="font-mono">{simCharCount} / 10,000</span>
               </div>
@@ -405,7 +380,7 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono flex items-center gap-2">
                     Zone C — Replay Telemetry &amp; Model Arena Comparison
                   </h3>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     Dual inference comparing active TF-IDF linear baseline against PyTorch Bi-LSTM benchmark.
                   </p>
                 </div>
@@ -450,7 +425,7 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                       : `Baseline recommends "${comparison.baseline.predicted_category}", whereas Challenger recommends "${comparison.bilstm.predicted_category}".`}
                   </span>
                 </div>
-                <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/80 border border-slate-300 shrink-0">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-white/80 border border-slate-300 shrink-0">
                   Δ Conf: {(comparison.confidence_delta * 100).toFixed(1)}%
                 </span>
               </div>
@@ -467,24 +442,22 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
 
                   {/* Provenance Consistency Check Badge */}
                   <span
-                    className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                    className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full border ${
                       isProvenanceMatch
                         ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                         : 'bg-amber-50 text-amber-900 border-amber-300'
                     }`}
                   >
-                    {isProvenanceMatch
-                      ? 'PROVENANCE VERIFIED: Active Production Checkpoint'
-                      : 'VERSION DRIFT WARNING: Model Checkpoint Changed'}
+                    {isProvenanceMatch === null ? 'Model version unavailable' : isProvenanceMatch ? 'Model versions match' : 'Model version changed'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   {/* Category Shift */}
                   <div className="p-2.5 bg-white border border-slate-200/80 rounded-lg">
-                    <div className="text-[11px] text-slate-500 font-medium">Category Disposition</div>
+                    <div className="text-xs text-slate-500 font-medium">Category Disposition</div>
                     <div className="font-bold text-slate-900 pt-1">
-                      {isCategoryFlipped ? (
+                      {!origCategory ? "Original category unavailable" : isCategoryFlipped ? (
                         <span className="text-amber-700 flex items-center gap-1">
                           {origCategory} <ArrowRight size={12} /> {simBaselineCategory}
                         </span>
@@ -498,23 +471,19 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
 
                   {/* Confidence Delta */}
                   <div className="p-2.5 bg-white border border-slate-200/80 rounded-lg">
-                    <div className="text-[11px] text-slate-500 font-medium">Confidence Shift</div>
+                    <div className="text-xs text-slate-500 font-medium">Confidence Shift</div>
                     <div className="font-bold text-slate-900 pt-1 font-mono tabular-nums">
-                      {(simConf * 100).toFixed(1)}%{' '}
-                      <span className={confDelta >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                        ({confDelta >= 0 ? `+${(confDelta * 100).toFixed(1)}%` : `${(confDelta * 100).toFixed(1)}%`})
-                      </span>
+                      {(comparison.baseline.confidence * 100).toFixed(1)}%{' '}
+                      <span className="text-ink-muted">{confDelta === null ? "Original value unavailable" : `(${confDelta >= 0 ? "+" : ""}${confDelta.toFixed(1)} pp)`}</span>
                     </div>
                   </div>
 
                   {/* Top-2 Margin Delta */}
                   <div className="p-2.5 bg-white border border-slate-200/80 rounded-lg">
-                    <div className="text-[11px] text-slate-500 font-medium">Top-2 Probability Margin (P₁ - P₂)</div>
+                    <div className="text-xs text-slate-500 font-medium">Top-2 Probability Margin (P₁ - P₂)</div>
                     <div className="font-bold text-slate-900 pt-1 font-mono tabular-nums">
-                      {(simMargin * 100).toFixed(1)}%{' '}
-                      <span className={marginDelta >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                        ({marginDelta >= 0 ? `+${(marginDelta * 100).toFixed(1)}%` : `${(marginDelta * 100).toFixed(1)}%`})
-                      </span>
+                      {(comparison.baseline.margin * 100).toFixed(1)}%{' '}
+                      <span className="text-ink-muted">{marginDelta === null ? "Original value unavailable" : `(${marginDelta >= 0 ? "+" : ""}${marginDelta.toFixed(1)} pp)`}</span>
                     </div>
                   </div>
                 </div>
@@ -531,8 +500,8 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                         <div className="text-xs font-bold text-slate-900">
                           {comparison.baseline.model_name}
                         </div>
-                        <span className="text-[10px] font-mono text-teal-800 font-semibold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
-                          PRODUCTION CLASSIFIER
+                        <span className="text-xs font-mono text-teal-800 font-semibold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                          Routing model
                         </span>
                       </div>
                     </div>
@@ -560,7 +529,7 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                         {(comparison.baseline.margin * 100).toFixed(1)}%
                       </span>
                     </div>
-                    <div className="flex justify-between font-mono pt-1 border-t border-slate-100 text-[11px]">
+                    <div className="flex justify-between font-mono pt-1 border-t border-slate-100 text-xs">
                       <span className="text-slate-500">Active TF-IDF N-Gram Features (of 50,000):</span>
                       <span className="font-bold text-slate-800">
                         {comparison.baseline.token_or_feature_count}
@@ -578,8 +547,8 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                         <div className="text-xs font-bold text-slate-900">
                           {comparison.bilstm.model_name}
                         </div>
-                        <span className="text-[10px] font-mono text-indigo-800 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
-                          NEURAL BENCHMARK CHALLENGER
+                        <span className="text-xs font-mono text-indigo-800 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                          Benchmark model
                         </span>
                       </div>
                     </div>
@@ -607,7 +576,7 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                         {(comparison.bilstm.margin * 100).toFixed(1)}%
                       </span>
                     </div>
-                    <div className="flex justify-between font-mono pt-1 border-t border-slate-100 text-[11px]">
+                    <div className="flex justify-between font-mono pt-1 border-t border-slate-100 text-xs">
                       <span className="text-slate-500">Non-Padding Sequence Tokens (max_len=200/250, truncated: true/false):</span>
                       <span className="font-bold text-slate-800">
                         {comparison.bilstm.token_or_feature_count} (truncated: {String(comparison.bilstm.truncated)})
@@ -625,7 +594,7 @@ export const DecisionIntelligenceLab: React.FC<DecisionIntelligenceLabProps> = (
                     <strong>Attribution Transparency:</strong> Per-token linear feature attribution applies to the primary baseline inspection. PyTorch Bi-LSTM utilizes deep contextual sequence embeddings.
                   </div>
                 </div>
-                <div className="text-[11px] text-slate-500 border-t border-slate-200/60 pt-1.5 font-mono">
+                <div className="text-xs text-slate-500 border-t border-slate-200/60 pt-1.5 font-mono">
                   Uncalibrated model probability estimates. Stateless simulation—never written to PostgreSQL.
                 </div>
               </div>

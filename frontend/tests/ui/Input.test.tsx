@@ -58,5 +58,11 @@ describe('Input Component', () => {
     render(<Input disabled placeholder="Locked input" />);
     expect(screen.getByPlaceholderText('Locked input')).toBeDisabled();
   });
+
+  it('keeps external instructions and announces only the visible field message', () => {
+    render(<><p id="format">Use your reference ID.</p><Input id="ref" aria-describedby="format" helperText="Ready" errorMessage="Check this reference" /></>);
+    expect(screen.getByRole('textbox')).toHaveAccessibleDescription('Use your reference ID. Check this reference');
+    expect(screen.queryByText('Ready')).toBeNull();
+  });
 });
 

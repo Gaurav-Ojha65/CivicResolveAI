@@ -7,6 +7,7 @@ import { ExecutiveAnalyticsResponse } from '../../../src/types/grievance';
 import * as AuthProviderModule from '../../../src/app/providers/AuthProvider';
 
 vi.mock('../../../src/lib/api/endpoints', () => ({
+  getSystemStatus: vi.fn(),
   getExecutiveAnalytics: vi.fn(),
   seedDemoTelemetry: vi.fn(),
 }));
@@ -92,6 +93,15 @@ describe('ExecutiveAnalyticsPage', () => {
     });
   });
 
+  it('keeps figures and simulation hidden until analytics arrive', async () => {
+    vi.mocked(endpoints.getExecutiveAnalytics).mockRejectedValueOnce(new Error('Snapshot unavailable'));
+    render(<MemoryRouter><ExecutiveAnalyticsPage /></MemoryRouter>);
+    expect(screen.getByText('Loading complaint analytics…')).toBeVisible();
+    expect(await screen.findByText('Snapshot unavailable')).toBeVisible();
+    expect(screen.queryByText('Total complaints')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('monte-carlo-stress-lab')).not.toBeInTheDocument();
+  });
+
   it('renders executive metrics, charts, and truthful AI notice', async () => {
     vi.mocked(endpoints.getExecutiveAnalytics).mockResolvedValueOnce(sampleAnalytics);
 
@@ -102,11 +112,11 @@ describe('ExecutiveAnalyticsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Grievance Intake & AI Triage Intelligence Hub/i)).toBeInTheDocument();
+      expect(screen.getByText(/Complaint analytics/i)).toBeInTheDocument();
       expect(screen.getByText(/14-Day Complaint Velocity & Adjudication Trend/i)).toBeInTheDocument();
       expect(screen.getByText(/Volume & Priority Matrix/i)).toBeInTheDocument();
       expect(screen.getByText(/Pending Case Age/i)).toBeInTheDocument();
-      expect(screen.getByText(/Confidence Calibration Bands/i)).toBeInTheDocument();
+      expect(screen.getByText(/Model confidence bands/i)).toBeInTheDocument();
       expect(screen.getByText('100')).toBeInTheDocument(); // total
     });
 
@@ -116,7 +126,7 @@ describe('ExecutiveAnalyticsPage', () => {
     expect(screen.getByText('72%')).toBeInTheDocument(); // share of pending cases under 24 hours
 
     // Truthful AI notice
-    expect(screen.getByText(/Uncalibrated model probability estimates/i)).toBeInTheDocument();
+    expect(screen.getByText(/uncalibrated probability estimates/i)).toBeInTheDocument();
   });
 
   it('calls seedDemoTelemetry when seed button and confirmation dialog are confirmed', async () => {
@@ -134,10 +144,10 @@ describe('ExecutiveAnalyticsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Seed Realistic CFPB Demo/i)).toBeInTheDocument();
+      expect(screen.getByText(/Add demo cases/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText(/Seed Realistic CFPB Demo/i));
+    fireEvent.click(screen.getByText(/Add demo cases/i));
 
     // Explicit confirmation modal must appear
     const confirmDialog = await screen.findByRole('dialog', { name: /confirm synthetic demo seeding/i });
@@ -150,7 +160,7 @@ describe('ExecutiveAnalyticsPage', () => {
 
     await waitFor(() => {
       expect(endpoints.seedDemoTelemetry).toHaveBeenCalledTimes(1);
-      expect(screen.getByText(/Successfully seeded 32 complaints/i)).toBeInTheDocument();
+      expect(screen.getByText(/32 new cases added/i)).toBeInTheDocument();
     });
   });
 
@@ -164,10 +174,10 @@ describe('ExecutiveAnalyticsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Seed Realistic CFPB Demo/i)).toBeInTheDocument();
+      expect(screen.getByText(/Add demo cases/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText(/Seed Realistic CFPB Demo/i));
+    fireEvent.click(screen.getByText(/Add demo cases/i));
 
     const confirmDialog = await screen.findByRole('dialog', { name: /confirm synthetic demo seeding/i });
     expect(confirmDialog).toBeInTheDocument();
@@ -352,11 +362,11 @@ describe('ExecutiveAnalyticsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('On-Demand Telemetry')).toBeInTheDocument();
+      expect(screen.getByText('On-demand report')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Point-in-Time Database Snapshot')).toBeInTheDocument();
-    expect(screen.getAllByText('Point-in-Time Snapshot').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('Based on stored cases')).toBeInTheDocument();
+    expect(screen.getAllByText('Snapshot').length).toBeGreaterThanOrEqual(3);
 
     // Ensure misleading continuous streaming claims are NOT present
     expect(screen.queryByText(/Live Operational Queue/i)).not.toBeInTheDocument();

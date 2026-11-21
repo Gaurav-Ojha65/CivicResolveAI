@@ -5,30 +5,30 @@ export default {
     extend: {
       colors: {
         ink: {
-          deep: '#0B1F3A',
-          DEFAULT: '#0B1F3A',
+          deep: '#142B3A',
+          DEFAULT: '#142B3A',
           700: '#1E3A5F',
           muted: '#496171',
         },
         brand: {
           50: '#F0FDFA',
-          600: '#0D9488',
+          600: '#0F766E',
           700: '#0F766E',
           800: '#115E59',
         },
         teal: {
           trust: '#0F766E',
-          'trust-hover': '#0D9488',
+          'trust-hover': '#0B5F59',
           'trust-light': '#F0FDFA',
         },
-        canvas: '#F6F7F9',
+        canvas: '#F4F7F9',
         surface: '#FFFFFF',
-        line: '#E3E7ED',
+        line: '#DCE5EA',
         border: {
-          DEFAULT: '#E3E7ED',
+          DEFAULT: '#DCE5EA',
           subtle: '#EAEFF3',
         },
-        focus: '#0F766E',
+        focus: '#2563EB',
         semantic: {
           success: {
             fg: '#166534',
@@ -53,35 +53,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: [
-          'Inter',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"Segoe UI"',
-          'sans-serif',
-        ],
-        serif: [
-          '"Source Serif 4"',
-          'ui-serif',
-          'Georgia',
-          'Cambria',
-          '"Times New Roman"',
-          'Times',
-          'serif',
-        ],
-        mono: [
-          '"JetBrains Mono"',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Monaco',
-          'Consolas',
-          '"Liberation Mono"',
-          '"Courier New"',
-          'monospace',
-        ],
+        sans: ['var(--font-sans)'],
+        serif: ['var(--font-serif)'],
+        mono: ['var(--font-mono)'],
       },
       borderRadius: {
         sm: '6px',

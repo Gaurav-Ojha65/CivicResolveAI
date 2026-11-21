@@ -21,7 +21,7 @@ export function useTriageShortcuts({
 }: TriageShortcutsOptions) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (!enabled) return;
+      if (!enabled || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
 
       // Guard: do not trigger when typing inside inputs, textareas, selects
       const target = e.target as HTMLElement | null;

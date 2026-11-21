@@ -67,7 +67,7 @@ describe('SubmissionReceipt', () => {
 
   it('renders the disclosure text', () => {
     renderReceipt();
-    expect(screen.getByText(/preliminary and does not represent/i)).toBeInTheDocument();
+    expect(screen.getByText(/flagged cases enter the reviewer queue/i)).toBeInTheDocument();
   });
 
   it('renders a "Return to home" link pointing to /', () => {
@@ -81,7 +81,7 @@ describe('SubmissionReceipt', () => {
     expect(screen.getByRole('button', { name: /print/i })).toBeInTheDocument();
   });
 
-  it('renders a Download Official Receipt (.txt) button and triggers download', async () => {
+  it('renders a Download receipt (.txt) button and triggers download', async () => {
     const createObjectURLMock = vi.fn().mockReturnValue('blob:mock-url');
     const revokeObjectURLMock = vi.fn();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
@@ -89,11 +89,21 @@ describe('SubmissionReceipt', () => {
     window.URL.revokeObjectURL = revokeObjectURLMock;
 
     renderReceipt();
-    const downloadBtn = screen.getByRole('button', { name: /download official receipt/i });
+    const downloadBtn = screen.getByRole('button', { name: /Download receipt/i });
     expect(downloadBtn).toBeInTheDocument();
 
     await userEvent.click(downloadBtn);
     expect(createObjectURLMock).toHaveBeenCalledTimes(1);
+    const blob = createObjectURLMock.mock.calls[0]?.[0];
+    const receiptText = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    expect(receiptText).toContain('Demonstration complaint receipt');
+    expect(receiptText).toContain('Flagged cases enter the reviewer queue');
+    expect(receiptText).not.toContain('mandatory human');
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/downloaded!/i)).toBeInTheDocument();
 
@@ -194,7 +204,7 @@ describe('SubmissionReceipt', () => {
     expect(dts.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('prominently displays one-time tracking secret and immediate warning when present', () => {
+  it('conceals the one-time secret until requested and explains how to keep it', async () => {
     const submission: GrievanceSubmissionResponse = {
       id: '123e4567-e89b-12d3-a456-426614174000',
       trackingSecret: 'trk_TestOneTimeSecretValue1234567890abcdefghij',
@@ -209,7 +219,11 @@ describe('SubmissionReceipt', () => {
     renderReceipt(submission);
 
     expect(screen.getByText(/save your tracking secret immediately/i)).toBeInTheDocument();
-    expect(screen.getByText('trk_TestOneTimeSecretValue1234567890abcdefghij')).toBeInTheDocument();
+    const secret = screen.getByText('trk_TestOneTimeSecretValue1234567890abcdefghij');
+    expect(secret).toHaveClass('hidden', 'print:inline');
+    await userEvent.click(screen.getByRole('button', { name: 'Show secret' }));
+    expect(secret).not.toHaveClass('hidden');
+    expect(screen.getByText(/downloaded copies include the secret/i)).toBeVisible();
     expect(screen.getByRole('button', { name: /copy tracking secret/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /track complaint progress/i })).toHaveAttribute('href', '/track');
   });

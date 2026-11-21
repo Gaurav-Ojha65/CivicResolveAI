@@ -21,6 +21,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       rightIcon,
       disabled,
       id,
+      'aria-describedby': externalDescription,
       ...props
     },
     ref
@@ -33,8 +34,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const hasError = isInvalid || Boolean(errorMessage);
 
     const describedBy = [
+      externalDescription,
       hasError && errorMessage ? errorId : null,
-      helperText ? helperId : null,
+      !hasError && helperText ? helperId : null,
     ]
       .filter(Boolean)
       .join(' ') || undefined;
@@ -57,8 +59,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             aria-invalid={hasError ? 'true' : 'false'}
             aria-describedby={describedBy}
             className={cn(
-              'w-full h-10 px-3 py-2 text-sm text-ink bg-surface rounded-lg transition-colors',
-              'border border-border placeholder:text-ink-muted/60',
+              'w-full min-w-0 h-11 px-3 py-2 text-base sm:text-sm text-ink bg-surface rounded-lg transition-colors',
+              'border border-slate-500 placeholder:text-ink-muted',
               'focus:outline-none focus:border-focus focus:ring-1 focus:ring-focus',
               'disabled:bg-canvas disabled:text-ink-muted/70 disabled:cursor-not-allowed',
               leftIcon ? 'pl-9' : 'pl-3',

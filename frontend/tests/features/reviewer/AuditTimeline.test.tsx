@@ -14,9 +14,9 @@ describe('AuditTimeline', () => {
       />
     );
 
-    expect(screen.getByText(/Immutable Case Audit Trail/i)).toBeInTheDocument();
+    expect(screen.getByText(/Case audit history/i)).toBeInTheDocument();
     expect(screen.getByText(/0 events/i)).toBeInTheDocument();
-    expect(screen.getByText(/Initial automated intake recorded/i)).toBeInTheDocument();
+    expect(screen.getByText(/No audit events were returned/i)).toBeInTheDocument();
   });
 
   it('renders chronological audit history entries with system intake and reviewer actions', () => {

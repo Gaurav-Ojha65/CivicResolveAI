@@ -16,11 +16,12 @@ function renderPage() {
 }
 
 describe('SubmitGrievancePage Privacy & Presets', () => {
-  it('loads sample CFPB presets into textarea on button click', () => {
+  it('loads clearly labeled fictional examples into textarea on button click', () => {
     renderPage();
 
+    fireEvent.click(screen.getByText('Use a fictional example'));
     const mortgagePresetBtn = screen.getByRole('button', {
-      name: /Critical Mortgage Foreclosure/i,
+      name: /Mortgage foreclosure/i,
     });
     expect(mortgagePresetBtn).toBeInTheDocument();
 
@@ -40,9 +41,9 @@ describe('SubmitGrievancePage Privacy & Presets', () => {
       },
     });
 
-    expect(screen.getByText(/Sensitive Numbers Detected:/i)).toBeInTheDocument();
+    expect(screen.getByText(/possible sensitive numbers detected/i)).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Mask Sensitive Numbers as XXXX/i })
+      screen.getByRole('button', { name: /mask sensitive numbers/i })
     ).toBeInTheDocument();
   });
 
@@ -57,7 +58,7 @@ describe('SubmitGrievancePage Privacy & Presets', () => {
     });
 
     const maskBtn = screen.getByRole('button', {
-      name: /Mask Sensitive Numbers as XXXX/i,
+      name: /mask sensitive numbers/i,
     });
     fireEvent.click(maskBtn);
 
@@ -66,7 +67,7 @@ describe('SubmitGrievancePage Privacy & Presets', () => {
     expect(textarea.value).toContain('(XXX) XXX-4567');
   });
 
-  it('updates narrative completeness guidance according to word count', () => {
+  it('updates the draft word count', () => {
     renderPage();
 
     const textarea = screen.getByRole('textbox');
@@ -76,7 +77,7 @@ describe('SubmitGrievancePage Privacy & Presets', () => {
       target: { value: 'Short text for banking complaint.' },
     });
     expect(
-      screen.getByText(/Brief narrative • More details help AI routing/i)
+      screen.getByText(/Draft length · 5 words/i)
     ).toBeInTheDocument();
 
     // 2. Good detail (20-100 words)
@@ -84,7 +85,7 @@ describe('SubmitGrievancePage Privacy & Presets', () => {
       'I was charged unauthorized overdraft fees three consecutive times on my checking account despite having sufficient deposited funds. The branch manager refused to reverse the charges despite providing bank transaction statements.';
     fireEvent.change(textarea, { target: { value: goodDetail } });
     expect(
-      screen.getByText(/Good level of detail for triage/i)
+      screen.getByText('Draft length · ' + goodDetail.split(' ').length + ' words')
     ).toBeInTheDocument();
   });
 });

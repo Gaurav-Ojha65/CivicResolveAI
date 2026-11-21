@@ -86,11 +86,10 @@ describe('SubmitGrievancePage — Accessibility', () => {
     await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
   });
 
-  it('the description textarea counter has aria-live="polite"', () => {
+  it('announces when an example replaces the draft', () => {
     renderPage();
 
-    const counter = document.querySelector('[aria-live="polite"]');
-    expect(counter).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
 
   it('submit button is keyboard accessible (not pointer-events-none when enabled)', () => {

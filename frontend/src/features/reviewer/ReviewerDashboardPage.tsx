@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-  RotateCcw,
   CheckCircle2,
   Clock,
   Layers,
@@ -54,23 +52,6 @@ const PRIORITY_OPTIONS: ReadonlyArray<[PriorityFilter, string]> = [
   ['LOW', 'Low'],
 ];
 
-const AnimatedKpiNumber: React.FC<{ value: number | string; className?: string }> = ({ value, className }) => {
-  return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      <motion.p
-        key={String(value)}
-        initial={{ y: -10, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 10, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 350, damping: 26 }}
-        className={className}
-      >
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </motion.p>
-    </AnimatePresence>
-  );
-};
-
 function renderCaseAge(grievance: GrievanceResponse) {
   const submitted = new Date(grievance.submittedAt).getTime();
   if (Number.isNaN(submitted)) {
@@ -120,6 +101,15 @@ export const ReviewerDashboardPage: React.FC = () => {
   const [selectedPriority, setSelectedPriority] = useState<PriorityFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const searchTerm = searchQuery.trim();
+  const [settledSearch, setSettledSearch] = useState('');
+  useEffect(() => {
+    if (!searchTerm) {
+      setSettledSearch('');
+      return;
+    }
+    const timeout = window.setTimeout(() => setSettledSearch(searchTerm), 250);
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   // Keyboard navigation row index
   const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
@@ -128,7 +118,7 @@ export const ReviewerDashboardPage: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Last refreshed timestamp
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(() => new Date());
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   // Slide-Over Quick Peek State & Cache
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -137,69 +127,65 @@ export const ReviewerDashboardPage: React.FC = () => {
   const [quickPeekError, setQuickPeekError] = useState<string | null>(null);
   const quickPeekTriggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const handleCopyId = (e: React.MouseEvent, id: string) => {
+  const handleCopyId = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(id).catch(() => {});
+    if (!navigator.clipboard) return;
+    try { await navigator.clipboard.writeText(id); } catch { return; }
     setCopiedId(id);
     setTimeout(() => {
       setCopiedId((current) => (current === id ? null : current));
     }, 2000);
   };
 
-  const handleToggleQuickPeek = async (id: string, triggerBtn?: HTMLButtonElement | null) => {
-    if (triggerBtn) {
-      quickPeekTriggerRef.current = triggerBtn;
-    }
-
-    if (expandedRowId === id) {
-      setExpandedRowId(null);
-      return;
-    }
-
-    setExpandedRowId(id);
-
-    // If already in cache: 0 duplicate network calls
-    if (quickPeekCache.has(id)) {
-      return;
-    }
-
-    setQuickPeekLoadingId(id);
-    setQuickPeekError(null);
-    try {
-      const detail = await getGrievanceById(id);
-      setQuickPeekCache((prev) => {
-        const next = new Map(prev);
-        next.set(id, detail);
-        return next;
-      });
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setQuickPeekError(err.message || 'Failed to load grievance details');
-      } else if (err instanceof Error) {
-        setQuickPeekError(err.message);
-      } else {
-        setQuickPeekError('An error occurred loading grievance details');
-      }
-    } finally {
-      setQuickPeekLoadingId(null);
-    }
+  const [peekAttempt, setPeekAttempt] = useState(0);
+  const closeQuickPeek = useCallback(() => setExpandedRowId(null), []);
+  const handleToggleQuickPeek = (id: string, trigger?: HTMLButtonElement | null) => {
+    if (trigger) quickPeekTriggerRef.current = trigger;
+    setExpandedRowId(current => current === id ? null : id);
   };
+
+  useEffect(() => {
+    setQuickPeekError(null);
+    if (!expandedRowId || quickPeekCache.has(expandedRowId)) {
+      setQuickPeekLoadingId(null);
+      return;
+    }
+    const controller = new AbortController();
+    setQuickPeekLoadingId(expandedRowId);
+    getGrievanceById(expandedRowId, controller.signal)
+      .then(detail => {
+        if (!controller.signal.aborted) {
+          setQuickPeekCache(previous => new Map(previous).set(expandedRowId, detail));
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setQuickPeekError(error instanceof Error ? error.message : 'Could not load this case.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setQuickPeekLoadingId(null);
+      });
+    return () => controller.abort();
+  }, [expandedRowId, peekAttempt, quickPeekCache]);
 
   const fetchStats = useCallback(async (signal?: AbortSignal) => {
     setStatsLoading(true);
     setStatsError(null);
     try {
       const data = await getGrievanceStats(signal);
+      if (signal?.aborted) return;
       setStats(data);
       setLastRefreshedAt(new Date());
     } catch (err) {
+      if (signal?.aborted) return;
       if (err instanceof ApiError) {
         setStatsError(err.message || `Failed to load statistics (${err.status})`);
       } else if (err instanceof Error && err.name !== 'AbortError') {
         setStatsError(err.message);
       }
     } finally {
-      setStatsLoading(false);
+      if (!signal?.aborted) setStatsLoading(false);
     }
   }, []);
 
@@ -207,13 +193,16 @@ export const ReviewerDashboardPage: React.FC = () => {
     const controller = new AbortController();
     fetchStats(controller.signal);
     return () => controller.abort();
-  }, [fetchStats]);
+  }, [fetchStats, queueRefresh]);
 
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
     setQueueLoading(true);
     setQueueError(null);
+
+    // Abort the old request immediately while waiting for the new search to settle.
+    if (searchTerm !== settledSearch) return () => controller.abort();
 
     async function fetchQueue() {
       try {
@@ -250,12 +239,12 @@ export const ReviewerDashboardPage: React.FC = () => {
 
     void fetchQueue();
     return () => controller.abort();
-  }, [currentPage, selectedStatus, selectedPriority, searchTerm, queueRefresh]);
+  }, [currentPage, selectedStatus, selectedPriority, searchTerm, settledSearch, queueRefresh]);
 
   const refreshQueue = () => setQueueRefresh((previous) => previous + 1);
 
   const handleRefreshAll = () => {
-    fetchStats();
+    setQuickPeekCache(new Map());
     refreshQueue();
   };
 
@@ -269,9 +258,9 @@ export const ReviewerDashboardPage: React.FC = () => {
     setCurrentPage(0);
   };
 
-  const handleResetFilters = () => {
-    setSelectedStatus('ALL');
-    setSelectedPriority('ALL');
+  const selectSummary = (status: StatusFilter = 'ALL', priority: PriorityFilter = 'ALL') => {
+    setSelectedStatus(status);
+    setSelectedPriority(priority);
     setSearchQuery('');
     setCurrentPage(0);
   };
@@ -294,7 +283,10 @@ export const ReviewerDashboardPage: React.FC = () => {
         activeEl instanceof HTMLSelectElement ||
         (activeEl as HTMLElement)?.isContentEditable;
 
-      if (isInput) return;
+      if (isInput || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey ||
+          document.querySelector('[aria-modal="true"]')) return;
+      if ((e.key === 'Enter' || e.key === ' ') &&
+          activeEl?.closest('button, a[href], summary')) return;
 
       if (e.key === 'j' || e.key === 'J') {
         e.preventDefault();
@@ -315,7 +307,7 @@ export const ReviewerDashboardPage: React.FC = () => {
         if (expandedRowId) {
           setExpandedRowId(null);
         } else if (selectedStatus !== 'ALL' || selectedPriority !== 'ALL' || searchTerm) {
-          handleResetFilters();
+          selectSummary();
         }
       }
     };
@@ -324,50 +316,26 @@ export const ReviewerDashboardPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [visibleGrievances, selectedRowIndex, expandedRowId, navigate, selectedStatus, selectedPriority, searchTerm]);
 
-  const minutesSinceRefresh = Math.max(0, Math.floor((Date.now() - lastRefreshedAt.getTime()) / 60000));
-  const refreshText = minutesSinceRefresh === 0 ? 'Updated just now' : `Updated ${minutesSinceRefresh} min ago`;
+  const refreshText = lastRefreshedAt
+    ? `Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : '';
 
   const hasActiveFilters = selectedStatus !== 'ALL' || selectedPriority !== 'ALL' || Boolean(searchTerm);
 
   return (
     <ReviewerLayout
-      title="Triage & Queue Management"
-      subtitle="Real-time consumer finance complaint intelligence & human-in-the-loop triage."
+      title="Complaint queue"
       onRefresh={handleRefreshAll}
       isRefreshing={statsLoading || queueLoading}
     >
       <div className="space-y-5">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80">
+        <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-sans">
-                Reviewer Workspace
-              </h1>
-              <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-teal-50 text-teal-800 border border-teal-200">
-                Live Queue
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1">
-              Human-in-the-loop queue for consumer grievance triage and adjudication.
-            </p>
+            <h1 className="text-3xl font-semibold tracking-tight text-ink">Complaint queue</h1>
+            <p className="mt-2 text-sm text-ink-muted">Review incoming complaints and their routing decisions, newest first.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 font-mono">
-              {refreshText}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleRefreshAll}
-              leftIcon={<RotateCcw size={13} className={statsLoading || queueLoading ? 'animate-spin' : ''} />}
-              disabled={statsLoading || queueLoading}
-              className="bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs text-xs font-semibold"
-            >
-              Refresh Data
-            </Button>
-          </div>
-        </div>
+          {refreshText && <p className="text-xs text-ink-muted">{refreshText}</p>}
+        </header>
 
         {/* ─── 1. TOP RIBBON: CONNECTED KPI STRIP ─────────────────────────── */}
         {statsLoading && !stats ? (
@@ -391,122 +359,18 @@ export const ReviewerDashboardPage: React.FC = () => {
           />
         ) : stats ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 border border-slate-200 rounded-xl bg-white shadow-2xs overflow-hidden">
-            {/* 1. Total Volume */}
-            <div
-              onClick={() => handleResetFilters()}
-              className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/70 transition-colors cursor-pointer group"
-              title="Click to reset filters and view all grievances"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider group-hover:text-slate-900 transition-colors">
-                  Total Volume
-                </p>
-                <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
-                  <Layers size={14} />
-                </div>
-              </div>
-              <div className="mt-2">
-                <AnimatedKpiNumber
-                  value={stats.total}
-                  className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono tabular-nums tracking-tight"
-                />
-                <p className="mt-1 text-xs text-slate-500 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-600 inline-block shrink-0" />
-                  <span>Active repository aggregate</span>
-                </p>
-              </div>
-            </div>
-
-            {/* 2. Pending Review */}
-            <div
-              onClick={() => handleStatusFilterChange('PENDING_REVIEW')}
-              className="p-4 sm:p-5 flex flex-col justify-between hover:bg-amber-50/40 transition-colors cursor-pointer group"
-              title="Click to filter by Pending Review"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-amber-800 uppercase tracking-wider group-hover:text-amber-900 transition-colors">
-                  Pending Review
-                </p>
-                <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center">
-                  <Clock size={14} />
-                </div>
-              </div>
-              <div className="mt-2">
-                <AnimatedKpiNumber
-                  value={stats.pendingReview}
-                  className="text-2xl sm:text-3xl font-extrabold text-amber-800 font-mono tabular-nums tracking-tight"
-                />
-                <p className="mt-1 text-xs text-amber-800 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse inline-block shrink-0" />
-                  <span>Requires reviewer attention</span>
-                </p>
-              </div>
-            </div>
-
-            {/* 3. Auto-Routed */}
-            <div
-              onClick={() => handleStatusFilterChange('AUTO_ROUTED')}
-              className="p-4 sm:p-5 flex flex-col justify-between hover:bg-teal-50/40 transition-colors cursor-pointer group"
-              title="Click to filter by Auto-Routed"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-teal-800 uppercase tracking-wider group-hover:text-teal-900 transition-colors">
-                  Auto-Routed
-                </p>
-                <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 flex items-center justify-center">
-                  <CheckCircle2 size={14} />
-                </div>
-              </div>
-              <div className="mt-2">
-                <div className="flex items-baseline gap-2">
-                  <AnimatedKpiNumber
-                    value={stats.byStatus['AUTO_ROUTED'] || 0}
-                    className="text-2xl sm:text-3xl font-extrabold text-teal-800 font-mono tabular-nums tracking-tight"
-                  />
-                  <span className="text-xs text-slate-500 font-mono tabular-nums">
-                    /{' '}
-                    <span className="tabular-nums">{(stats.byStatus['APPROVED'] || 0).toLocaleString()}</span>
-                    {' '}Approved
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-600 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block shrink-0" />
-                  <span>
-                    {stats.total > 0
-                      ? `${Math.round(((stats.byStatus['APPROVED'] || 0) / stats.total) * 100)}% confirmed rate`
-                      : 'Confirmed classification'}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            {/* 4. Critical Priority */}
-            <div
-              onClick={() => handlePriorityFilterChange('CRITICAL')}
-              className="p-4 sm:p-5 flex flex-col justify-between hover:bg-red-50/40 transition-colors cursor-pointer group"
-              title="Click to filter by Critical Priority"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-red-800 uppercase tracking-wider group-hover:text-red-900 transition-colors">
-                  Critical Priority
-                </p>
-                <div className="w-7 h-7 rounded-lg bg-red-50 text-red-800 border border-red-200 flex items-center justify-center">
-                  <ShieldAlert size={14} />
-                </div>
-              </div>
-              <div className="mt-2">
-                <AnimatedKpiNumber
-                  value={stats.byPriority['CRITICAL'] || 0}
-                  className="text-2xl sm:text-3xl font-extrabold text-red-800 font-mono tabular-nums tracking-tight"
-                />
-                <p className="mt-1 text-xs text-red-800 flex items-center gap-1.5 tabular-nums">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-600 inline-block shrink-0" />
-                  <span>
-                    Across all complaints
-                  </span>
-                </p>
-              </div>
-            </div>
+            {[
+              { label: 'Total volume', count: stats.total, hint: 'All submitted complaints', icon: Layers, select: () => selectSummary() },
+              { label: 'Pending review', count: stats.pendingReview, hint: 'Awaiting a decision', icon: Clock, select: () => selectSummary('PENDING_REVIEW') },
+              { label: 'Auto-routed', count: stats.byStatus.AUTO_ROUTED ?? 0, hint: 'Routed automatically', icon: CheckCircle2, select: () => selectSummary('AUTO_ROUTED') },
+              { label: 'Critical Priority', count: stats.byPriority.CRITICAL ?? 0, hint: 'Across all complaints', icon: ShieldAlert, select: () => selectSummary('ALL', 'CRITICAL') },
+            ].map(({ label, count, hint, icon: Icon, select }) => (
+              <button type="button" key={label} onClick={select} className="group p-4 text-left hover:bg-canvas focus-visible:outline-offset-[-3px] sm:p-5">
+                <span className="flex items-center justify-between gap-2 text-sm font-medium text-ink-muted">{label}<Icon size={16} aria-hidden="true" /></span>
+                <span className="mt-2 block text-3xl font-semibold tabular-nums text-ink">{count.toLocaleString()}</span>
+                <span className="mt-1 block text-xs text-ink-muted">{hint}</span>
+              </button>
+            ))}
           </div>
         ) : null}
 
@@ -518,17 +382,17 @@ export const ReviewerDashboardPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                  Complaint Review Queue
+                  Cases
                 </h2>
                 {!queueLoading && !queueError && (
                   <span className="text-xs text-slate-500 font-mono">
-                    ({visibleGrievances.length} cases shown)
+                    {pageData?.totalElements.toLocaleString()} matching
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 {/* Keyboard Shortcuts Hint */}
-                <div className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-500">
+                <div className="hidden xl:flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-500">
                   <span>J / K</span>
                   <span className="text-slate-400">•</span>
                   <span>Space Peek</span>
@@ -545,77 +409,23 @@ export const ReviewerDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Row 2: Quick Filter Segmented Pills */}
-            {stats && (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs select-none">
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-                    !hasActiveFilters
-                      ? 'bg-slate-900 text-white font-semibold shadow-2xs'
-                      : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  }`}
-                >
-                  <span>All Complaints ({stats.total})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleStatusFilterChange('PENDING_REVIEW')}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-                    selectedStatus === 'PENDING_REVIEW'
-                      ? 'bg-amber-100 text-amber-900 font-semibold border border-amber-300 shadow-2xs'
-                      : 'bg-amber-50/70 text-amber-800 hover:bg-amber-100/70'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                  <span>Pending Review ({stats.pendingReview})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleStatusFilterChange('AUTO_ROUTED')}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-                    selectedStatus === 'AUTO_ROUTED'
-                      ? 'bg-teal-100 text-teal-900 font-semibold border border-teal-300 shadow-2xs'
-                      : 'bg-teal-50/70 text-teal-800 hover:bg-teal-100/70'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
-                  <span>Auto-Routed ({stats.byStatus['AUTO_ROUTED'] || 0})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePriorityFilterChange('CRITICAL')}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-                    selectedPriority === 'CRITICAL'
-                      ? 'bg-red-100 text-red-900 font-semibold border border-red-300 shadow-2xs'
-                      : 'bg-red-50/70 text-red-800 hover:bg-red-100/70'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
-                  <span>Critical Priority ({stats.byPriority['CRITICAL'] || 0})</span>
-                </button>
-              </div>
-            )}
-
             {/* Row 3: Search & Select Dropdowns Bar */}
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
               {/* Category / Reference Search Input */}
               <div className="relative flex-1 min-w-[200px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  type="text"
+                  type="search"
+                  aria-label="Search complaints by category or reference"
                   placeholder="Search by category or ID prefix…"
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-full pl-8 pr-8 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors"
+                  className="w-full pl-8 pr-8 py-2 text-sm font-medium rounded-lg border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors"
                 />
                 {searchQuery && (
                   <button
                     type="button"
+                    aria-label="Clear complaint search"
                     onClick={() => handleSearchChange('')}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
@@ -632,7 +442,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                   const option = STATUS_OPTIONS.find(([value]) => value === event.currentTarget.value);
                   if (option) handleStatusFilterChange(option[0]);
                 }}
-                className="min-w-[130px] text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors cursor-pointer"
+                className="min-w-[130px] text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors cursor-pointer"
               >
                 {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
@@ -645,7 +455,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                   const option = PRIORITY_OPTIONS.find(([value]) => value === event.currentTarget.value);
                   if (option) handlePriorityFilterChange(option[0]);
                 }}
-                className="min-w-[130px] text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors cursor-pointer"
+                className="min-w-[130px] text-xs font-medium rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:bg-white shadow-2xs transition-colors cursor-pointer"
               >
                 {PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
@@ -654,7 +464,7 @@ export const ReviewerDashboardPage: React.FC = () => {
               {hasActiveFilters && (
                 <button
                   type="button"
-                  onClick={handleResetFilters}
+                  onClick={() => selectSummary()}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-1.5 rounded-lg transition-colors shrink-0 shadow-2xs"
                 >
                   <X size={12} />
@@ -693,15 +503,15 @@ export const ReviewerDashboardPage: React.FC = () => {
             ) : !pageData || visibleGrievances.length === 0 ? (
               <div className="p-8">
                 <EmptyState
-                  title="No grievances match the filter criteria"
+                  title={hasActiveFilters ? "No matching complaints" : "No complaints yet"}
                   description={
                     hasActiveFilters
                       ? 'Try adjusting or resetting your filter criteria to view more complaints.'
-                      : 'The review queue is currently empty. All grievances have been reviewed.'
+                      : 'Submitted complaints will appear here.'
                   }
                   action={
                     hasActiveFilters ? (
-                      <Button variant="secondary" size="sm" onClick={handleResetFilters}>
+                      <Button variant="secondary" size="sm" onClick={() => selectSummary()}>
                         Reset Filters
                       </Button>
                     ) : undefined
@@ -711,9 +521,9 @@ export const ReviewerDashboardPage: React.FC = () => {
             ) : (
               <div>
                 {/* ─── DUAL RESPONSIVE QUEUE: STACKED CARDS ON MOBILE / 42px TABLE ON DESKTOP ── */}
-                <div className="overflow-x-auto max-h-[640px] overflow-y-auto">
-                  <table className="w-full text-left border-collapse text-xs block md:table" data-testid="queue-table">
-                    <thead className="hidden md:table-header-group sticky top-0 z-10 bg-white border-b border-slate-200 shadow-2xs">
+                <div className="xl:overflow-x-auto xl:max-h-[640px] xl:overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs block xl:table" data-testid="queue-table">
+                    <thead className="hidden xl:table-header-group sticky top-0 z-10 bg-white border-b border-slate-200 shadow-2xs">
                       <tr className="text-slate-500 font-semibold uppercase tracking-wider text-[11px] h-9">
                         <th scope="col" className="py-2 px-3.5 w-40">
                           Reference
@@ -728,7 +538,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                           Case age
                         </th>
                         <th scope="col" className="py-2 px-3 w-24">
-                          Models
+                          Review flag
                         </th>
                         <th scope="col" className="py-2 px-3 w-32">
                           Status
@@ -738,7 +548,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="block md:table-row-group divide-y-0 md:divide-y md:divide-slate-100 space-y-3 md:space-y-0 p-3 md:p-0">
+                    <tbody className="block xl:table-row-group divide-y-0 xl:divide-y xl:divide-slate-100 space-y-3 xl:space-y-0 p-3 xl:p-0">
                       {visibleGrievances.map((grievance, idx) => {
                         const isSelected = selectedRowIndex === idx;
                         const isExpanded = expandedRowId === grievance.id;
@@ -748,14 +558,14 @@ export const ReviewerDashboardPage: React.FC = () => {
                             key={grievance.id}
                             data-testid={`queue-row-${grievance.id}`}
                             onClick={() => setSelectedRowIndex(idx)}
-                            className={`grid grid-cols-2 gap-y-2.5 gap-x-2 p-3.5 md:p-0 bg-white md:bg-transparent rounded-xl md:rounded-none border border-slate-200/90 md:border-0 shadow-2xs md:shadow-none md:table-row md:h-[42px] transition-colors cursor-pointer group ${
+                            className={`grid grid-cols-2 gap-y-2.5 gap-x-2 p-3.5 xl:p-0 bg-white xl:bg-transparent rounded-xl xl:rounded-none border border-slate-200/90 xl:border-0 shadow-2xs xl:shadow-none xl:table-row xl:h-[42px] transition-colors cursor-pointer group ${
                               isSelected
-                                ? 'bg-teal-50/70 ring-1 ring-inset ring-teal-500/40 md:ring-0 md:bg-teal-50/70'
+                                ? 'bg-teal-50/70 ring-1 ring-inset ring-teal-500/40 xl:ring-0 xl:bg-teal-50/70'
                                 : 'hover:bg-slate-50/80'
                             }`}
                           >
                             {/* 1. Reference (Mobile: Row 1 Left) */}
-                            <td className="order-1 md:order-none col-span-1 md:col-auto md:table-cell py-0 md:py-1.5 px-0 md:px-3.5 font-mono font-medium text-slate-900">
+                            <td className="order-1 xl:order-none col-span-1 xl:col-auto xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3.5 font-mono font-medium text-slate-900">
                               <div className="flex items-center gap-1.5">
                                 <span
                                   title={grievance.id}
@@ -768,7 +578,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                                   onClick={(e) => handleCopyId(e, grievance.id)}
                                   aria-label={`Copy reference ${grievance.id.substring(0, 8)}`}
                                   title="Copy full reference ID"
-                                  className="p-1 rounded text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                                  className="p-1 rounded text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                                 >
                                   {copiedId === grievance.id ? (
                                     <Check size={12} className="text-emerald-600" />
@@ -777,7 +587,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                                   )}
                                 </button>
                                 {grievance.version != null && (
-                                  <span className="text-[10px] text-slate-400 font-mono tabular-nums">
+                                  <span className="text-[10px] text-slate-600 font-mono tabular-nums">
                                     v{grievance.version}
                                   </span>
                                 )}
@@ -785,44 +595,44 @@ export const ReviewerDashboardPage: React.FC = () => {
                             </td>
 
                             {/* 2. Category (Mobile: Row 2 Full Width) */}
-                            <td className="order-3 md:order-none col-span-2 md:col-auto md:table-cell py-0 md:py-1.5 px-0 md:px-3 font-medium text-slate-900">
-                              <div className="text-sm font-semibold md:text-xs md:font-medium text-slate-900 truncate max-w-full md:max-w-[180px]" title={grievance.assignedCategory}>
+                            <td className="order-3 xl:order-none col-span-2 xl:col-auto xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3 font-medium text-slate-900">
+                              <div className="text-sm font-semibold xl:text-xs xl:font-medium text-slate-900 truncate max-w-full xl:max-w-[180px]" title={grievance.assignedCategory}>
                                 {grievance.assignedCategory}
                               </div>
                             </td>
 
                             {/* 3. Priority (Mobile: Row 1 Right) */}
-                            <td className="order-2 md:order-none col-span-1 md:col-auto flex justify-end md:table-cell py-0 md:py-1.5 px-0 md:px-3">
+                            <td className="order-2 xl:order-none col-span-1 xl:col-auto flex justify-end xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3">
                               <StatusIndicator priority={grievance.priority} size="sm" />
                             </td>
 
                             {/* 4. Case age (Mobile: Row 3 Left) */}
-                            <td className="order-4 md:order-none col-span-1 md:col-auto flex items-center md:table-cell py-0 md:py-1.5 px-0 md:px-3">
+                            <td className="order-4 xl:order-none col-span-1 xl:col-auto flex items-center xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3">
                               {renderCaseAge(grievance)}
                             </td>
 
-                            {/* 5. Models (Mobile: Row 4 Left) */}
-                            <td className="order-6 md:order-none col-span-1 md:col-auto flex items-center pt-2.5 md:pt-0 border-t border-slate-100 md:border-0 md:table-cell py-0 md:py-1.5 px-0 md:px-3">
+                            {/* 5. Review flag (Mobile: Row 4 Left) */}
+                            <td className="order-6 xl:order-none col-span-1 xl:col-auto flex items-center pt-2.5 xl:pt-0 border-t border-slate-100 xl:border-0 xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3">
                               {grievance.reviewRequired ? (
                                 <div className="flex items-center gap-1.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
-                                  <span className="text-xs font-medium text-slate-700">Split</span>
+                                  <span className="text-xs font-medium text-slate-700">Flagged for review</span>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-1.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
-                                  <span className="text-xs font-medium text-slate-700">Agree</span>
+                                  <span className="text-xs font-medium text-slate-700">No review flag</span>
                                 </div>
                               )}
                             </td>
 
                             {/* 6. Status (Mobile: Row 3 Right) */}
-                            <td className="order-5 md:order-none col-span-1 md:col-auto flex justify-end md:table-cell py-0 md:py-1.5 px-0 md:px-3">
+                            <td className="order-5 xl:order-none col-span-1 xl:col-auto flex justify-end xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3">
                               <StatusIndicator status={grievance.status} size="sm" />
                             </td>
 
                             {/* 7. Actions (Mobile: Row 4 Right) */}
-                            <td className="order-7 md:order-none col-span-1 md:col-auto flex justify-end md:table-cell py-0 md:py-1.5 px-0 md:px-3.5 text-right pt-2.5 md:pt-0 border-t border-slate-100 md:border-0">
+                            <td className="order-7 xl:order-none col-span-2 xl:col-auto flex justify-end xl:table-cell py-0 xl:py-1.5 px-0 xl:px-3.5 text-right pt-2.5 xl:pt-0 border-t border-slate-100 xl:border-0">
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
@@ -844,7 +654,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                                 >
                                   <Eye
                                     size={12}
-                                    className={isExpanded ? 'text-teal-700' : 'text-slate-400'}
+                                    className={isExpanded ? 'text-teal-700' : 'text-slate-600'}
                                   />
                                   <span>{isExpanded ? 'Collapse' : 'Quick Peek'}</span>
                                 </button>
@@ -919,12 +729,12 @@ export const ReviewerDashboardPage: React.FC = () => {
       {/* ─── 3. SLIDE-OVER QUICK PEEK DRAWER ──────────────────────────────── */}
       <QuickPeekDrawer
         isOpen={Boolean(expandedRowId)}
-        onClose={() => setExpandedRowId(null)}
+        onClose={closeQuickPeek}
         grievanceId={expandedRowId}
         detail={expandedRowId ? quickPeekCache.get(expandedRowId) || null : null}
         isLoading={Boolean(quickPeekLoadingId)}
         error={quickPeekError}
-        onRetry={() => expandedRowId && handleToggleQuickPeek(expandedRowId)}
+        onRetry={() => setPeekAttempt(current => current + 1)}
         triggerRef={quickPeekTriggerRef}
       />
     </ReviewerLayout>

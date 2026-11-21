@@ -163,13 +163,13 @@ function sampleBinomial(n: number, p: number, prng: () => number): number {
  * Interpolates human review routing probability from live telemetry confidence & margin buckets.
  * Respects:
  * 1. Simplex inequality bound (P1 - P2 >= 2*P1 - 1).
- * 2. Conservative critical-priority routing floor (minimum 0.12 or empirical share).
+ * 2. Critical-priority routing floor from the supplied share.
  */
 export function interpolateHumanReviewRate(config: MonteCarloConfig): number {
   const { confidenceGate, marginGate } = config;
 
   // Modeling assumption: route at least the configured critical share to human review.
-  const criticalPolicyFloor = Math.max(0.12, config.criticalShare ?? 0.12);
+  const criticalPolicyFloor = Math.max(0, config.criticalShare ?? 0.12);
 
   const buckets = config.confidenceBuckets ?? {
     under55: 20,
@@ -233,7 +233,7 @@ export function runMonteCarloSimulation(config: MonteCarloConfig): MonteCarloRes
   const breachCapacityThreshold = 3 * dailyClearanceCapacity; // modeled 3-day capacity
 
   const initialBacklog = Math.max(0, Math.round(config.initialBacklog ?? 8));
-  const baseArrivals = Math.max(1, config.baseDailyArrivals ?? 25);
+  const baseArrivals = Math.max(0, config.baseDailyArrivals ?? 25);
   const effectiveLambda = baseArrivals * config.surgeMultiplier;
 
   const humanReviewRate = interpolateHumanReviewRate(config);
