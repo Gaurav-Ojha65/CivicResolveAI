@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
+import { trapDialogTab } from '../utils/trapDialogTab';
 import { listGrievances, seedDemoTelemetry } from '../../../lib/api/endpoints';
 import { GrievanceResponse, SystemStatusResponse } from '../../../types/grievance';
 
@@ -45,6 +46,8 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [searchError, setSearchError] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [searchResults, setSearchResults] = useState<GrievanceResponse[]>([]);
@@ -60,12 +63,20 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       setHighlightedIndex(0);
       setConfirmSeedOpen(false);
       setSeedNotice(null);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      const trigger = document.activeElement as HTMLElement | null;
+      inputRef.current?.focus();
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = previousOverflow;
+        trigger?.focus();
+      };
     }
   }, [isOpen]);
 
   // Debounced search for complaint ID or category
   useEffect(() => {
+    setSearchError(false);
     const trimmed = query.trim();
     setSearchResults([]);
     if (!isOpen || trimmed.length < 2) {
@@ -80,8 +91,8 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       try {
         const res = await listGrievances({ search: trimmed, size: 5 }, signal);
         if (!signal.aborted) setSearchResults(res.content);
-      } catch (err) {
-        if (!signal.aborted) console.error('Command palette search error:', err);
+      } catch {
+        if (!signal.aborted) setSearchError(true);
       } finally {
         if (!signal.aborted) setIsSearching(false);
       }
@@ -166,8 +177,8 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       id: 'action-seed-demo',
       title: 'Load Synthetic Demo Cases',
       subtitle: isAlreadySeeded
-        ? 'Synthetic dataset already initialized in database (32 cases across 8 categories)'
-        : 'Seed 32 synthetic CFPB grievances across 8 categories with varied submission ages',
+        ? 'The demo cases have already been added.'
+        : 'Add synthetic complaints for testing reviewer workflows.',
       category: 'ACTION',
       icon: <Database size={16} className={isAlreadySeeded ? 'text-slate-400' : 'text-amber-600'} />,
       disabled: isAlreadySeeded,
@@ -224,6 +235,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab' && dialogRef.current) trapDialogTab(e.nativeEvent, dialogRef.current);
     if (confirmSeedOpen) {
       if (e.key === 'Escape') {
         setConfirmSeedOpen(false);
@@ -239,7 +251,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightedIndex((prev) => (prev - 1 + allItems.length) % Math.max(1, allItems.length));
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' && e.target === inputRef.current) {
       e.preventDefault();
       const current = allItems[highlightedIndex];
       if (current && !current.disabled) {
@@ -252,15 +264,16 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Global Command Palette"
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-950/70 backdrop-blur-xl animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-ink/60 animate-in fade-in duration-150"
       onClick={onClose}
       onKeyDown={handleKeyDown}
     >
       <div
-        className="w-full max-w-xl bg-slate-900/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/10 overflow-hidden flex flex-col max-h-[80vh] text-slate-100"
+        className="w-full max-w-xl bg-ink rounded-2xl shadow-2xl border border-white/10 overflow-hidden flex flex-col max-h-[80vh] text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input Bar */}
@@ -270,7 +283,10 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
             ref={inputRef}
             type="text"
             role="combobox"
-            aria-expanded={allItems.length > 0}
+            aria-label="Search complaints and commands"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-activedescendant={allItems[highlightedIndex]?.id}
             aria-controls="command-palette-results"
             placeholder="Search complaint ID, category, or command..."
             value={query}
@@ -283,6 +299,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           {isSearching && (
             <Loader2 size={16} className="text-teal-400 animate-spin ml-2 flex-shrink-0" />
           )}
+          <button type="button" onClick={onClose} aria-label="Close command palette" className="ml-2 shrink-0 rounded p-2 text-slate-200 hover:bg-white/10"><X size={16} /></button>
           {query && !isSearching && (
             <button
               onClick={() => {
@@ -291,6 +308,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
               }}
               className="p-1 rounded-md text-slate-400 hover:text-white"
               title="Clear search"
+              aria-label="Clear search"
             >
               <X size={14} />
             </button>
@@ -307,7 +325,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                   Confirm Synthetic Telemetry Seeding
                 </p>
                 <p className="text-[11px] text-amber-200/80 mt-0.5">
-                  This action will persist 32 synthetic CFPB complaints with varied submission ages. The operation is idempotent.
+                  This adds a batch of synthetic complaints to the database. Running it again keeps the same batch.
                 </p>
               </div>
             </div>
@@ -342,10 +360,11 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
         )}
 
         {/* Action / Result Lists */}
-        <div id="command-palette-results" role="listbox" className="flex-1 overflow-y-auto p-2 space-y-4">
-          {allItems.length === 0 ? (
+        <div id="command-palette-results" role="listbox" aria-label="Workspace results" className="flex-1 overflow-y-auto p-2 space-y-4">
+          {searchError && <p role="status" className="p-3 text-sm text-amber-200">Case search is unavailable. Try searching again.</p>}
+          {allItems.length === 0 && !searchError ? (
             <div className="py-12 text-center text-xs text-slate-400">
-              No matching routes, complaints, or actions found for &ldquo;{query}&rdquo;
+              {isSearching ? 'Searching cases…' : 'No matching cases or commands.'}
             </div>
           ) : (
             <>
@@ -361,6 +380,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                       return (
                         <div
                           key={action.id}
+                          id={action.id}
                           role="option"
                           aria-selected={isSelected}
                           onClick={() => action.perform()}
@@ -412,6 +432,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                       return (
                         <div
                           key={action.id}
+                          id={action.id}
                           role="option"
                           aria-selected={isSelected}
                           onClick={() => action.perform()}
@@ -456,6 +477,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
                       return (
                         <div
                           key={action.id}
+                          id={action.id}
                           role="option"
                           aria-selected={isSelected}
                           aria-disabled={action.disabled}

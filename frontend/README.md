@@ -21,6 +21,7 @@ All versions verified from `package.json` and production build:
 - `react-dom`: `^18.3.1` (18.3.1)
 - `react-router-dom`: `^6.28.0` (6.28.0)
 - `lucide-react`: `^0.460.0` (0.460.0)
+- `framer-motion`: `^14.13.0` (reviewer interactions)
 
 ### Development & Tooling Dependencies
 - `vite`: `^6.0.1` (6.4.5)

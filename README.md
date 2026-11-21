@@ -50,8 +50,9 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 ## 2. Key Features & User Workflows
 
 ### A. Public Citizen Intake & Tracking Journey
-1. **Interactive Triage Hero (`/`)**:
-   - Live interactive complaint simulator demonstrating how narratives are processed across 8 standardized CFPB financial categories.
+1. **Complaint overview (`/`)**:
+   - Static, explicitly illustrative case progress alongside an explanation of intake, AI-assisted routing, conditional human review, and secure tracking.
+   - Supported product categories are retrieved from the backend. The page does not display fabricated live metrics or use an autoplay video.
 2. **Submit Grievance Portal (`/submit`)**:
    - Accessible form enforcing client- and server-side narrative validation (20 to 5,000 characters).
    - Pre-submission client safeguard inspector and explicit privacy notice disclosing PII redaction.
@@ -69,8 +70,9 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 2. **Reviewer Queue & Dashboard (`/reviewer`)**:
    - Queue filtering by persisted workflow status (`AUTO_ROUTED`, `PENDING_REVIEW`, `APPROVED`, `OVERRIDDEN`, `REJECTED`) and priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
    - Optimistic concurrency control via JPA `@Version` prevents race conditions with standard `HTTP 409 Conflict`.
-3. **Decision Intelligence Lab (`/reviewer/grievances/:id`)**:
-   - Comprehensive investigation environment combining immutable case anchors, what-if narrative experimentation, live dual-model arbitration, and precedent retrieval via Lexical TF-IDF Cosine Similarity.
+3. **Case review (`/reviewer/grievances/:id`)**:
+   - Places case identity, the original complaint, the recorded AI recommendation, and review controls before optional supporting analysis.
+   - Supporting analysis includes counterfactual experiments, dual-model comparison, and precedent retrieval via lexical TF-IDF cosine similarity.
 4. **Executive Analytics & Model Audit (`/reviewer/audit`)**:
    - Real-time aggregations of category volumes, reviewer override frequencies, probability margin distributions, and model calibration metrics.
 
@@ -80,7 +82,7 @@ Financial institutions handle millions of consumer complaints regarding mortgage
 
 | Tier | Component | Technology & Frameworks | Version / Details |
 | :--- | :--- | :--- | :--- |
-| **Frontend** | Single Page Application | React 18, TypeScript, Vite | Tailwind CSS, Lucide Icons, Headless UI, Vitest, Testing Library |
+| **Frontend** | Single Page Application | React 18, TypeScript, Vite | Tailwind CSS, Lucide Icons, Framer Motion, Vitest, Testing Library |
 | **Backend API** | Enterprise REST Service | Java 21 / 25, Spring Boot | Spring Boot 4.1.1, Spring Data JPA, Spring Security, Hibernate 7, Flyway 10, HikariCP |
 | **NLP Microservice** | Inference Engine & Triage | Python 3.12+, FastAPI, Uvicorn | Scikit-learn, PyTorch, Pandas, NumPy, Pydantic v2, Joblib, VADER Sentiment |
 | **Persistence** | Relational Database | PostgreSQL 16+ | Flyway Schema Migrations (V1–V6), Dual-Role Security Isolation |

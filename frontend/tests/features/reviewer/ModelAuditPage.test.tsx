@@ -12,6 +12,7 @@ import {
 import * as AuthProviderModule from '../../../src/app/providers/AuthProvider';
 
 vi.mock('../../../src/lib/api/endpoints', () => ({
+  getSystemStatus: vi.fn(),
   getModelAudit: vi.fn(),
   getCalibrationMetrics: vi.fn(),
   getActiveLearningManifest: vi.fn(),
@@ -138,7 +139,7 @@ describe('ModelAuditPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/AI Audit & Model Benchmark Center/i)
+        screen.getByRole("heading", { name: "Model audit" })
       ).toBeInTheDocument();
       expect(screen.getByText('120')).toBeInTheDocument(); // total adjudicated
     });
@@ -159,7 +160,7 @@ describe('ModelAuditPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/Verified Validation Benchmark: TF-IDF vs. PyTorch Bi-LSTM/i)
+        screen.getByText(/Validation Benchmark: TF-IDF vs. PyTorch Bi-LSTM/i)
       ).toBeInTheDocument();
     });
 
@@ -187,8 +188,8 @@ describe('ModelAuditPage', () => {
       expect(screen.getByText(/Review Trigger Distribution/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Low Confidence \(<55%\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Narrow Margin \(<15%\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Low confidence$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Narrow margin$/i)).toBeInTheDocument();
   });
 
   it('renders Probability Calibration Inspector with optimal temperature and reliability diagram', async () => {
@@ -223,7 +224,7 @@ describe('ModelAuditPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/Active Learning & Distillation Flywheel/i)
+        screen.getByText(/Reviewed case export/i)
       ).toBeInTheDocument();
     });
 
@@ -245,7 +246,7 @@ describe('ModelAuditPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/AI Audit & Model Benchmark Center/i)
+        screen.getByRole("heading", { name: "Model audit" })
       ).toBeInTheDocument();
       expect(screen.getByText(/n = 6,363 fit \/ n = 6,363 eval/i)).toBeInTheDocument();
     });
@@ -257,21 +258,39 @@ describe('ModelAuditPage', () => {
 
     // 2. Assert clean human-readable split notes
     expect(screen.getByText(/n = 6,363 fit \/ n = 6,363 eval/i)).toBeInTheDocument();
-    expect(screen.getByText(/The held-out test split \(n = 12,727\) remains completely sealed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Calibration uses the validation split/i)).toBeInTheDocument();
 
     // 3. Assert provenance badge
     expect(
-      screen.getByText(/Source: Frozen Evaluation Artifact baseline_eval_test\.json & bilstm_eval_test\.json • Sealed Test Split n = 12,727/i)
+      screen.getByText(/Frozen evaluation artifacts: baseline_eval_test\.json and bilstm_eval_test\.json · 12,727 test examples/i)
     ).toBeInTheDocument();
 
     // 4. Assert Delta columns
     expect(screen.getByText('Δ Advantage')).toBeInTheDocument();
     expect(screen.getByText('Δ F1')).toBeInTheDocument();
 
-    // 5. Assert Gauge rendering (85.0% on top line, Agreement on sub-line, no '% Match' collision)
-    expect(screen.getAllByText('85.0%')).toHaveLength(2); // Card 2 + Gauge
-    expect(screen.getByText('Agreement')).toBeInTheDocument();
-    expect(container.textContent).not.toContain('85.0% Match');
+    expect(screen.getAllByText('85.0%')).toHaveLength(1);
+    expect(screen.queryByText(/Target:.*85%/)).not.toBeInTheDocument();
+  });
+
+  it('omits measurements and disables exports when supporting evidence is unavailable', async () => {
+    vi.mocked(endpoints.getModelAudit).mockResolvedValueOnce({...sampleAuditData, totalAdjudicated: 0});
+    vi.mocked(endpoints.getCalibrationMetrics).mockRejectedValueOnce(new Error('Artifact missing'));
+    vi.mocked(endpoints.getActiveLearningManifest).mockRejectedValueOnce(new Error('Manifest unavailable'));
+
+    render(<MemoryRouter><ModelAuditPage /></MemoryRouter>);
+
+    expect(await screen.findByText('Calibration unavailable')).toBeVisible();
+    expect(screen.getByText('No reviewed cases')).toBeVisible();
+    expect(screen.queryByText(/Optimal T|6.09%|3.06%|0.7866/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /Export Curated CSV/})).toBeDisabled();
+  });
+
+  it('counts priority-only overrides even when the category agrees', async () => {
+    vi.mocked(endpoints.getModelAudit).mockResolvedValueOnce({...sampleAuditData, reviewerAgreementRate: 1});
+    render(<MemoryRouter><ModelAuditPage /></MemoryRouter>);
+    expect(await screen.findByText('100.0%')).toBeVisible();
+    expect(screen.getByText('18')).toBeVisible();
   });
 
   it('renders error state when API call fails', async () => {

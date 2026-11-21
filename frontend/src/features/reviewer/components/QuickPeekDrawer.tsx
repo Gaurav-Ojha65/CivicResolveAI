@@ -9,6 +9,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { GrievanceDetailResponse } from '../../../types/grievance';
+import { trapDialogTab } from '../utils/trapDialogTab';
 import { Button } from '../../../components/ui/Button';
 
 export interface QuickPeekDrawerProps {
@@ -52,6 +53,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
   onRetry,
   triggerRef,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Focus management & Escape listener
@@ -61,6 +63,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
       closeButtonRef.current?.focus();
 
       const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Tab' && dialogRef.current) trapDialogTab(e, dialogRef.current);
         if (e.key === 'Escape') {
           e.stopPropagation();
           onClose();
@@ -93,7 +96,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
   const topNeg = pred?.explanation?.topNegativeFeatures?.slice(0, 6) || [];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="quick-peek-title">
+    <div ref={dialogRef} className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="quick-peek-title">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -134,7 +137,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                   className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-teal-500"
                 >
                   <Sparkles size={12} className="text-teal-200 shrink-0" />
-                  <span>Open Investigation Lab</span>
+                  <span>Open case</span>
                   <ArrowRight size={11} className="shrink-0" />
                 </Link>
               )}
@@ -225,8 +228,8 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                       Classification
                     </span>
                     <div className="flex items-baseline justify-between gap-1">
-                      <span className="text-xs font-bold text-slate-900 truncate" title={pred?.predictedCategory || detail.assignedCategory}>
-                        {pred?.predictedCategory || detail.assignedCategory}
+                      <span className="text-xs font-bold text-slate-900 truncate" title={pred?.predictedCategory || 'Unavailable'}>
+                        {pred?.predictedCategory || 'Unavailable'}
                       </span>
                       <span className="text-xs font-mono font-bold text-teal-800 tabular-nums shrink-0">
                         {pred ? `${Math.round(pred.confidence * 100)}%` : '—'}
@@ -243,15 +246,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                       <span className="font-semibold text-slate-800">
                         {pred ? `Δ ${(pred.margin * 100).toFixed(1)}%` : '—'}
                       </span>
-                      <span
-                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                          pred && pred.margin >= 0.15
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200'
-                        }`}
-                      >
-                        {pred && pred.margin >= 0.15 ? 'Robust' : 'Narrow'}
-                      </span>
+
                     </div>
                   </div>
 
@@ -269,7 +264,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                             : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
                         }`}
                       >
-                        {detail.reviewRequired ? 'HITL Flag' : 'Auto'}
+                        {detail.reviewRequired ? 'Review flagged' : 'No flag'}
                       </span>
                     </div>
                   </div>
@@ -326,7 +321,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                     to={`/reviewer/grievances/${detail.id}`}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors shadow-xs"
                   >
-                    <span>Proceed to Investigation Lab</span>
+                    <span>Review case details</span>
                     <ArrowRight size={14} />
                   </Link>
                 </div>

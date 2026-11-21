@@ -167,7 +167,7 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
     expect(reviewLinks[1]).toHaveAttribute('href', '/reviewer/grievances/87654321-dcba-4321-dcba-ba0987654321');
   });
 
-  it('applies responsive CSS classes for desktop table layout (md:table, md:table-row, md:table-cell)', async () => {
+  it('applies responsive CSS classes for desktop table layout (xl:table, xl:table-row, xl:table-cell)', async () => {
     renderDashboard();
 
     await waitFor(() => {
@@ -175,16 +175,16 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
     });
 
     const table = screen.getByTestId('queue-table');
-    expect(table.className).toContain('md:table');
+    expect(table.className).toContain('xl:table');
 
     const row = screen.getByTestId('queue-row-12345678-abcd-1234-abcd-1234567890ab');
-    expect(row.className).toContain('md:table-row');
-    expect(row.className).toContain('md:h-[42px]');
+    expect(row.className).toContain('xl:table-row');
+    expect(row.className).toContain('xl:h-[42px]');
 
     // Table header is visible on desktop, hidden on mobile
     const thead = table.querySelector('thead');
     expect(thead?.className).toContain('hidden');
-    expect(thead?.className).toContain('md:table-header-group');
+    expect(thead?.className).toContain('xl:table-header-group');
   });
 
   it('applies responsive CSS classes for mobile stacked card layout (grid-cols-2, rounded-xl, shadow, cell order)', async () => {
@@ -292,7 +292,7 @@ describe('ReviewerDashboard Responsive Presentation & Interactions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('quick-peek-content')).toBeInTheDocument();
     });
-    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('87654321-dcba-4321-dcba-ba0987654321');
+    expect(endpoints.getGrievanceById).toHaveBeenCalledWith('87654321-dcba-4321-dcba-ba0987654321', expect.any(AbortSignal));
 
     // Escape closes Quick Peek drawer
     fireEvent.keyDown(window, { key: 'Escape' });

@@ -37,11 +37,11 @@ describe('LoginPage', () => {
   it('renders login form elements and strict in-memory security notice', () => {
     renderLoginPage(false);
 
-    expect(screen.getByRole('heading', { name: /reviewer portal sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /reviewer sign in/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign in to workspace/i })).toBeInTheDocument();
-    expect(screen.getByText(/strict in-memory session/i)).toBeInTheDocument();
+    expect(screen.getByText(/session stays in this tab’s memory/i)).toBeInTheDocument();
   });
 
   it('redirects to /reviewer immediately if already authenticated', async () => {
@@ -115,7 +115,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/access forbidden: your account does not hold the required role_reviewer authority\./i)
+        screen.getByText(/this account does not have reviewer access\./i)
       ).toBeInTheDocument();
     });
   });

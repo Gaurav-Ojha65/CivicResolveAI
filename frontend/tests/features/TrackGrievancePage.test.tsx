@@ -77,7 +77,7 @@ describe('TrackGrievancePage', () => {
     renderPage();
 
     expect(screen.getByRole('heading', { name: /track complaint status/i })).toBeInTheDocument();
-    expect(screen.getByText(/secure case lookup/i)).toBeInTheDocument();
+    expect(screen.getByText(/your tracking credentials/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/reference id/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/one-time tracking secret/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /track complaint/i })).toBeInTheDocument();
@@ -152,8 +152,8 @@ describe('TrackGrievancePage', () => {
     await waitFor(() => {
       expect(screen.getByText(VALID_UUID)).toBeInTheDocument();
       expect(screen.getByText('Credit Card')).toBeInTheDocument();
-      expect(screen.getByText(/intake received/i)).toBeInTheDocument();
-      expect(screen.getByText(/automated routing/i)).toBeInTheDocument();
+      expect(screen.getByText('Submission Received')).toBeInTheDocument();
+      expect(screen.getByText('Triage Processing')).toBeInTheDocument();
       expect(screen.getByText(/queued for human specialist review/i)).toBeInTheDocument();
     });
   });
@@ -216,10 +216,12 @@ describe('TrackGrievancePage', () => {
 
     expect(screen.getByLabelText(/reference id/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/reference id/i)).toHaveValue('');
+    expect(screen.getByLabelText(/reference id/i)).toHaveFocus();
+    expect(screen.getByLabelText(/one-time tracking secret/i)).toHaveAttribute('type', 'password');
     expect(screen.getByLabelText(/one-time tracking secret/i)).toHaveValue('');
   });
 
-  it('renders progress stepper and allows copying reference ID to clipboard', async () => {
+  it('renders the recorded event list and allows copying reference ID to clipboard', async () => {
     const user = userEvent.setup();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
@@ -243,11 +245,8 @@ describe('TrackGrievancePage', () => {
       expect(screen.getByText(VALID_UUID)).toBeInTheDocument();
     });
 
-    // Check progress stepper items
-    expect(screen.getByText('Received')).toBeInTheDocument();
-    expect(screen.getByText('Auto-Triaged')).toBeInTheDocument();
-    expect(screen.getByText('Specialist review (if needed)')).toBeInTheDocument();
-    expect(screen.getByText('Resolved')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Recorded updates' }).children).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'Case summary' })).toHaveFocus();
 
     // Copy reference ID
     const copyBtn = screen.getByRole('button', { name: /copy reference id/i });
@@ -257,95 +256,21 @@ describe('TrackGrievancePage', () => {
     expect(screen.getByRole('button', { name: /reference id copied/i })).toBeInTheDocument();
   });
 
-  describe('Status Stepper Exhaustive Suite (one test per status)', () => {
-    it('shows PENDING_REVIEW at the specialist review stage while awaiting a reviewer', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'PENDING_REVIEW',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 3 of 4: Specialist review (if needed)')).toBeInTheDocument();
-        expect(screen.getByText('Awaiting review')).toBeInTheDocument();
-      });
-    });
-
-    it('correctly maps AUTO_ROUTED to Stage 2 of 4: Auto-Triaged (not Resolved)', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'AUTO_ROUTED',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 2 of 4: Auto-Triaged')).toBeInTheDocument();
-      });
-      expect(screen.queryByText('Stage 4 of 4: Resolved')).not.toBeInTheDocument();
-    });
-
-    it('correctly maps APPROVED to Stage 4 of 4: Resolved', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'APPROVED',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 4 of 4: Resolved')).toBeInTheDocument();
-      });
-    });
-
-    it('correctly maps OVERRIDDEN to Stage 4 of 4: Resolved', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'OVERRIDDEN',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 4 of 4: Resolved')).toBeInTheDocument();
-      });
-    });
-
-    it('shows REJECTED as closed without a success check', async () => {
-      const user = userEvent.setup();
-      vi.mocked(trackGrievance).mockResolvedValueOnce({
-        ...MOCK_TRACKING_RESPONSE,
-        status: 'REJECTED',
-      });
-
-      renderPage();
-      fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
-      fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
-      await user.click(screen.getByRole('button', { name: /track complaint/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Stage 4 of 4: Closed')).toBeInTheDocument();
-      });
-      const step4 = screen.getByRole('list', { name: /complaint progress stepper/i }).querySelectorAll('li')[3];
-      expect(step4).toHaveTextContent('Closed');
-      expect(step4?.querySelector('svg.lucide-check')).toBeNull();
-    });
+  it.each([
+    ['PENDING_REVIEW', 'Your case is awaiting a reviewer.'],
+    ['AUTO_ROUTED', 'Your case was routed automatically.'],
+    ['APPROVED', 'A reviewer confirmed the routing.'],
+    ['OVERRIDDEN', 'A reviewer changed the category or priority.'],
+    ['REJECTED', 'A reviewer closed the case without routing it further.'],
+  ] as const)('explains the actual %s routing status and empty history', async (status, explanation) => {
+    vi.mocked(trackGrievance).mockResolvedValueOnce({ ...MOCK_TRACKING_RESPONSE, status, timeline: [] });
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/reference id/i), { target: { value: VALID_UUID } });
+    fireEvent.change(screen.getByLabelText(/one-time tracking secret/i), { target: { value: VALID_SECRET } });
+    await userEvent.click(screen.getByRole('button', { name: /track complaint/i }));
+    expect(await screen.findByText(explanation)).toBeVisible();
+    expect(screen.getByText('No progress events recorded yet.')).toBeVisible();
+    expect(screen.queryByText('Resolved')).toBeNull();
+    expect(document.body.textContent).not.toContain(VALID_SECRET);
   });
 });

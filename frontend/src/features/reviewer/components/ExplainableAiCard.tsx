@@ -27,7 +27,7 @@ const FeatureBarItem: React.FC<{
   const isPositive = item.contribution >= 0;
   const hasTfidf = typeof item.tfidfValue === 'number' && !isNaN(item.tfidfValue);
   const hasCoef = typeof item.coefficient === 'number' && !isNaN(item.coefficient);
-  const ratio = maxAbsContrib > 0 ? Math.min(100, Math.round((Math.abs(item.contribution) / maxAbsContrib) * 100)) : 50;
+  const ratio = maxAbsContrib > 0 ? Math.min(100, Math.round((Math.abs(item.contribution) / maxAbsContrib) * 100)) : 0;
 
   return (
     <div className="py-2 px-3 rounded-xl bg-surface border border-border shadow-2xs space-y-1.5 transition-colors hover:border-slate-300">
@@ -86,7 +86,7 @@ const FeatureBarItem: React.FC<{
 
 export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction }) => {
   const [showAllProbabilities, setShowAllProbabilities] = useState(false);
-  const [showExplanationDetails, setShowExplanationDetails] = useState(true);
+  const [showExplanationDetails, setShowExplanationDetails] = useState(false);
 
   if (!prediction) {
     return (
@@ -96,8 +96,8 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
             <Sparkles size={20} />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-ink-deep">AI Triage & Prediction Analysis</h2>
-            <p className="text-[11px] text-ink-muted">Automated multi-class classification and rule evaluation.</p>
+            <h2 className="text-sm font-bold text-ink-deep">AI routing recommendation</h2>
+            <p className="text-[11px] text-ink-muted">Scores and review reasons recorded at submission.</p>
           </div>
         </div>
         <div className="text-xs text-ink-muted p-8 text-center bg-canvas rounded-xl mt-4 border border-border">
@@ -131,17 +131,17 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
   return (
     <div className="bg-surface rounded-2xl border border-border shadow-card overflow-hidden">
       {/* Header */}
-      <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between bg-canvas/40">
+      <div className="p-5 sm:p-6 border-b border-border flex flex-wrap items-center justify-between gap-3 bg-canvas/40">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-trust/10 text-teal-trust flex items-center justify-center">
             <Sparkles size={20} />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-ink-deep font-sans">
-              AI Triage & Prediction Analysis
+            <h2 className="text-lg font-semibold text-ink-deep font-sans">
+              AI routing recommendation
             </h2>
             <p className="text-[11px] text-ink-muted">
-              Automated multi-class classification and rule evaluation.
+              Scores and review reasons recorded at submission.
             </p>
           </div>
         </div>
@@ -152,13 +152,13 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
 
       <div className="p-6 space-y-6">
         {/* ── Key Metrics Grid ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <div className="p-4 bg-canvas rounded-xl border border-border shadow-2xs">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider block">
               Predicted Category
             </span>
             <span
-              className="text-xs font-bold text-ink-deep mt-1 block truncate"
+              className="text-xs font-bold text-ink-deep mt-1 block break-words"
               title={prediction.predictedCategory}
             >
               {prediction.predictedCategory}
@@ -169,16 +169,16 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider block">
               Confidence
             </span>
-            <span className="text-lg font-extrabold text-teal-trust mt-1 block font-mono">
+            <span className="text-lg font-semibold text-teal-trust mt-1 block font-mono">
               {(prediction.confidence * 100).toFixed(1)}%
             </span>
           </div>
 
           <div className="p-4 bg-canvas rounded-xl border border-border shadow-2xs">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider block">
-              Margin
+              Top-two margin
             </span>
-            <span className="text-lg font-extrabold text-ink-deep mt-1 block font-mono">
+            <span className="text-lg font-semibold text-ink-deep mt-1 block font-mono">
               {(prediction.margin * 100).toFixed(1)}%
             </span>
           </div>
@@ -202,7 +202,7 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
             {prediction.reviewReasons.length > 0 && (
               <div>
                 <span className="text-xs font-bold text-ink-deep block mb-1.5">
-                  Review Flags Triggered:
+                  Review triggers
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {prediction.reviewReasons.map((reason, idx) => (
@@ -217,7 +217,7 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
             {prediction.priorityReasons.length > 0 && (
               <div>
                 <span className="text-xs font-bold text-ink-deep block mb-1.5">
-                  Priority Assessment Rationale:
+                  Priority reasons
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {prediction.priorityReasons.map((reason, idx) => (
@@ -232,9 +232,9 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
         )}
 
         {/* ── Sentiment and Triage Alignment ──────────────────────────────────── */}
-        {(prediction.sentimentLabel || prediction.sentimentScore !== null) && (
+        {(prediction.sentimentLabel || typeof prediction.sentimentScore === 'number') && (
           <div className="p-3.5 bg-canvas/70 rounded-xl border border-border flex items-center justify-between text-xs">
-            <span className="font-semibold text-ink-muted">Sentiment Analysis:</span>
+            <span className="font-semibold text-ink-muted">Recorded sentiment</span>
             <div className="flex items-center gap-2">
               {prediction.sentimentLabel && (
                 <Badge
@@ -250,7 +250,7 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
                   {prediction.sentimentLabel}
                 </Badge>
               )}
-              {prediction.sentimentScore !== null && (
+              {typeof prediction.sentimentScore === 'number' && (
                 <span className="font-mono text-ink-muted text-xs font-medium">
                   Score: {prediction.sentimentScore.toFixed(2)}
                 </span>
@@ -261,11 +261,9 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
 
         {/* ── Category Probability Distribution ───────────────────────────────── */}
         {sortedProbabilities.length > 0 && (
-          <div className="space-y-3 pt-3 border-t border-border">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-ink-deep block">
-                Category Probability Distribution:
-              </span>
+          <details className="space-y-3 border-t border-border pt-3">
+            <summary className="cursor-pointer rounded py-1 text-sm font-semibold text-ink">Category probabilities</summary>
+            <div className="flex justify-end">
               {sortedProbabilities.length > 5 && (
                 <button
                   type="button"
@@ -304,7 +302,7 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
                 );
               })}
             </div>
-          </div>
+          </details>
         )}
 
         {/* ── Explainable AI (XAI) Attribution Container ───────────────────────── */}
@@ -313,12 +311,13 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
             <div className="flex items-center gap-2">
               <Scale className="w-4 h-4 text-teal-trust" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-deep">
-                Linear Feature Attribution & Decision Score
+                Feature contributions
               </h3>
             </div>
             {explanation && (
               <button
                 type="button"
+                aria-expanded={showExplanationDetails}
                 onClick={() => setShowExplanationDetails((prev) => !prev)}
                 className="text-xs text-ink-muted hover:text-ink-deep flex items-center gap-1"
                 aria-label={showExplanationDetails ? 'Collapse XAI details' : 'Expand XAI details'}
@@ -417,10 +416,10 @@ export const ExplainableAiCard: React.FC<ExplainableAiCardProps> = ({ prediction
             <div className="p-4 rounded-xl bg-canvas border border-border/80 text-xs text-ink-muted space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-ink-deep">
                 <Info size={14} className="text-teal-trust" />
-                <span>Explainable AI Attribution (Ready for Stage 4)</span>
+                <span>Feature contributions unavailable</span>
               </div>
               <p className="leading-relaxed">
-                Linear TF-IDF feature contribution vectors and decision boundary score decomposition will be attached here upon Stage 4 backend persistence rollout.
+                This prediction has no stored feature explanation.
               </p>
             </div>
           )}

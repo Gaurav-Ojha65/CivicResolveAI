@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { ShieldCheck, Lock, User, KeyRound, ArrowLeft } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ShieldCheck, Lock, User, KeyRound } from 'lucide-react';
 import { useAuth } from '../../app/providers/AuthProvider';
-import { AppLayout } from '../../components/layout/AppLayout';
+import { PublicLayout } from '../../components/layout/PublicLayout';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Button } from '../../components/ui/Button';
@@ -51,7 +51,7 @@ export const LoginPage: React.FC = () => {
         if (err.status === 401) {
           setErrorMessage('Invalid username or password. Please verify your reviewer credentials.');
         } else if (err.status === 403) {
-          setErrorMessage('Access forbidden: Your account does not hold the required ROLE_REVIEWER authority.');
+          setErrorMessage('This account does not have reviewer access.');
         } else {
           setErrorMessage(err.message || 'Authentication failed. Please check backend availability.');
         }
@@ -66,31 +66,17 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <AppLayout>
-      <div className="max-w-md mx-auto py-12 sm:py-16 px-4 sm:px-0">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-900 text-teal-400 mb-4 border border-slate-800 shadow-md">
-            <ShieldCheck size={32} />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink-deep font-sans">
-            Reviewer Portal Sign In
-          </h1>
-          <p className="mt-2 text-xs sm:text-sm text-ink-muted">
-            Authorized access for human triage and complaint adjudication.
-          </p>
+    <PublicLayout>
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-lg px-5 py-10 sm:py-16">
+        <div className="mb-6">
+          <ShieldCheck size={28} aria-hidden="true" className="mb-4 text-teal-trust" />
+          <h1 className="text-3xl font-semibold tracking-tight text-ink">Reviewer sign in</h1>
+          <p className="mt-2 text-base text-ink-muted">Use your staff credentials to open the complaint queue.</p>
         </div>
-
-        <div className="bg-surface rounded-2xl p-6 sm:p-8 border border-border shadow-card">
-          <div className="pb-5 mb-5 border-b border-border">
-            <h2 className="text-base font-bold text-ink-deep">Staff Authentication</h2>
-            <p className="text-xs text-ink-muted mt-0.5">
-              Enter your credentials to access the complaint triage queue.
-            </p>
-          </div>
-
+        <div className="rounded-xl border border-line bg-surface p-5 sm:p-8">
           {errorMessage && (
             <div className="mb-5">
-              <Alert variant="danger" title="Authentication Error">
+              <Alert variant="danger" title="Sign-in failed">
                 {errorMessage}
               </Alert>
             </div>
@@ -98,7 +84,7 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="username" className="text-xs font-bold text-ink-deep">
+              <Label htmlFor="username" className="text-sm font-semibold text-ink-deep">
                 Username
               </Label>
               <div className="mt-1">
@@ -118,7 +104,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div>
-              <Label htmlFor="password" className="text-xs font-bold text-ink-deep">
+              <Label htmlFor="password" className="text-sm font-semibold text-ink-deep">
                 Password
               </Label>
               <div className="mt-1">
@@ -145,30 +131,17 @@ export const LoginPage: React.FC = () => {
                 isLoading={isLoading}
                 disabled={isLoading}
               >
-                Sign In to Workspace
+                Sign in to workspace
               </Button>
             </div>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-border flex items-start gap-3 text-xs text-ink-muted bg-canvas p-4 rounded-xl border border-border/80">
-            <KeyRound size={16} className="text-teal-trust flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold text-ink-deep">Strict In-Memory Session:</span>{' '}
-              Credentials are never stored in browser storage (localStorage, sessionStorage, or cookies) and will be cleared immediately upon sign out or tab close.
-            </div>
-          </div>
-
-          <div className="mt-5 text-center">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-teal-trust transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus rounded"
-            >
-              <ArrowLeft size={13} />
-              Return to Public Citizen Portal
-            </Link>
+          <div className="mt-6 flex items-start gap-3 border-t border-line pt-5 text-sm text-ink-muted">
+            <KeyRound size={17} className="mt-0.5 shrink-0 text-teal-trust" aria-hidden="true" />
+            <p>Your session stays in this tab’s memory. Refreshing the page, closing the tab or signing out clears it.</p>
           </div>
         </div>
-      </div>
-    </AppLayout>
+      </main>
+    </PublicLayout>
   );
 };

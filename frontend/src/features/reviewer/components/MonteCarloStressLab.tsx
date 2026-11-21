@@ -40,7 +40,7 @@ interface ScenarioPreset {
 const SCENARIO_PRESETS: ScenarioPreset[] = [
   {
     key: 'BASELINE',
-    label: 'Production Baseline',
+    label: 'Baseline scenario',
     description: '0.55 Conf / 0.15 Margin / 1.0x Intake / 6 Reviewers',
     confidenceGate: 0.55,
     marginGate: 0.15,
@@ -49,7 +49,7 @@ const SCENARIO_PRESETS: ScenarioPreset[] = [
   },
   {
     key: 'SURGE',
-    label: '2.2x Regulatory Foreclosure Surge',
+    label: '2.2× intake surge',
     description: 'Severe intake volume shock / 6 Reviewers',
     confidenceGate: 0.55,
     marginGate: 0.15,
@@ -77,6 +77,16 @@ const SCENARIO_PRESETS: ScenarioPreset[] = [
 ];
 
 export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyticsData }) => {
+  const buckets = analyticsData?.confidenceSentimentBuckets;
+  if (!analyticsData || !analyticsData.dailyIntakeTrend?.length || !buckets ||
+      !(buckets.confidenceUnder55 + buckets.confidence55To75 + buckets.confidence75To90 + buckets.confidenceOver90) ||
+      !(buckets.narrowMargin + buckets.clearMargin)) {
+    return <p className="rounded-lg bg-canvas p-4 text-sm text-ink-muted">The simulation needs recorded intake history and prediction counts.</p>;
+  }
+  return <CapacitySimulation analyticsData={analyticsData} />;
+};
+
+function CapacitySimulation({ analyticsData }: { analyticsData: ExecutiveAnalyticsResponse }) {
   // Config state
   const [confidenceGate, setConfidenceGate] = useState<number>(0.55);
   const [marginGate, setMarginGate] = useState<number>(0.15);
@@ -92,52 +102,14 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
 
   // Derive empirical telemetry anchors
   const telemetryAnchors = useMemo(() => {
-    if (!analyticsData) {
-      return {
-        initialBacklog: 8,
-        baseDailyArrivals: 25,
-        confidenceBuckets: { under55: 20, b55To75: 30, b75To90: 30, over90: 20 },
-        marginBuckets: { narrow: 15, clear: 85 },
-        criticalShare: 0.12,
-      };
-    }
-
-    const initialBacklog = analyticsData.pendingReview ?? 8;
-
-    // Daily arrivals from dailyIntakeTrend
-    let baseDailyArrivals = 25;
-    if (analyticsData.dailyIntakeTrend && analyticsData.dailyIntakeTrend.length > 0) {
-      const sum = analyticsData.dailyIntakeTrend.reduce((acc, t) => acc + t.intakeCount, 0);
-      const avg = sum / analyticsData.dailyIntakeTrend.length;
-      if (avg > 0) baseDailyArrivals = Math.round(avg);
-    }
-
-    const confBuckets = analyticsData.confidenceSentimentBuckets
-      ? {
-          under55: analyticsData.confidenceSentimentBuckets.confidenceUnder55,
-          b55To75: analyticsData.confidenceSentimentBuckets.confidence55To75,
-          b75To90: analyticsData.confidenceSentimentBuckets.confidence75To90,
-          over90: analyticsData.confidenceSentimentBuckets.confidenceOver90,
-        }
-      : { under55: 20, b55To75: 30, b75To90: 30, over90: 20 };
-
-    const marginBuckets = analyticsData.confidenceSentimentBuckets
-      ? {
-          narrow: analyticsData.confidenceSentimentBuckets.narrowMargin,
-          clear: analyticsData.confidenceSentimentBuckets.clearMargin,
-        }
-      : { narrow: 15, clear: 85 };
-
-    const total = analyticsData.totalComplaints || 1;
-    const criticalCount = analyticsData.priorityDistribution?.CRITICAL ?? 0;
-    const criticalShare = Math.max(0.12, criticalCount / total);
-
+    const buckets = analyticsData.confidenceSentimentBuckets;
+    const arrivals = analyticsData.dailyIntakeTrend.reduce((sum, day) => sum + day.intakeCount, 0);
     return {
-      initialBacklog,
-      baseDailyArrivals,
-      confidenceBuckets: confBuckets,
-      marginBuckets,
-      criticalShare,
+      initialBacklog: analyticsData.pendingReview,
+      baseDailyArrivals: arrivals / analyticsData.dailyIntakeTrend.length,
+      confidenceBuckets: { under55: buckets.confidenceUnder55, b55To75: buckets.confidence55To75, b75To90: buckets.confidence75To90, over90: buckets.confidenceOver90 },
+      marginBuckets: { narrow: buckets.narrowMargin, clear: buckets.clearMargin },
+      criticalShare: analyticsData.totalComplaints > 0 ? (analyticsData.priorityDistribution.CRITICAL ?? 0) / analyticsData.totalComplaints : 0,
     };
   }, [analyticsData]);
 
@@ -342,14 +314,14 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs font-mono">
-              <Activity size={13} className="text-teal-700 animate-pulse" />
+              <Activity size={13} className="text-teal-700 " />
               STOCHASTIC MONTE CARLO SIMULATION • SEEDED PRNG (1,000 RUNS)
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-amber-50 text-amber-900 border border-amber-300">
               Synthetic capacity model
             </span>
             <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-line">
-              Discrete Integer Queue Physics
+              14-day horizon
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-ink font-serif">
@@ -358,9 +330,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
           <p className="text-xs text-slate-600 max-w-3xl leading-relaxed flex items-start gap-1.5">
             <Info size={14} className="text-teal-700 shrink-0 mt-0.5" />
             <span>
-              Projections are stochastic capacity simulations anchored to live queue telemetry, not persisted database
-              records. Simulates 1,000 discrete integer Poisson trajectories [B(t) = max(0, B(t-1) + H(t) - C(t))]
-              over 14 days with 8-class simplex-bounded AI routing.
+              This simulation combines recorded intake and prediction counts with staffing assumptions. Each simulated reviewer can complete three reviews per day. Changing a scenario affects this projection only.
             </span>
           </p>
         </div>
@@ -370,10 +340,10 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
             type="button"
             onClick={handleResetToTelemetry}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border border-line bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
-            title="Reset sliders to baseline telemetry values"
+            title="Restore baseline scenario assumptions"
           >
             <RotateCcw size={13} />
-            <span>Reset to Live Telemetry</span>
+            <span>Reset scenario</span>
           </button>
         </div>
       </div>
@@ -1146,7 +1116,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                   strokeWidth="1"
                 />
 
-                {/* 0.55 Production Gate Line */}
+                {/* 0.55 Scenario Gate Line */}
                 <line
                   x1={mapFrontX(0.55)}
                   y1={frontPadY}
@@ -1164,7 +1134,7 @@ export const MonteCarloStressLab: React.FC<MonteCarloStressLabProps> = ({ analyt
                   fontFamily="monospace"
                   textAnchor="middle"
                 >
-                  Prod 0.55
+                  Default 0.55
                 </text>
 
                 {/* Active Selected Confidence Gate Marker */}

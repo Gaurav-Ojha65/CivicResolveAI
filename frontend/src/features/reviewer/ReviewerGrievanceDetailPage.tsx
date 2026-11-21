@@ -11,8 +11,6 @@ import {
   Sparkles,
   Keyboard,
   RefreshCw,
-  FileCheck,
-  ShieldAlert,
   X,
 } from 'lucide-react';
 import { ReviewerLayout } from '../../components/layout/ReviewerLayout';
@@ -57,7 +55,7 @@ function getCaseAgeInfo(submittedAt: string) {
   const elapsedStr = days > 0 ? `${days}d ${hours}h` : `${hours}h ${mins}m`;
 
   return {
-    elapsedStr,
+    elapsedStr: Number.isNaN(submitTime) ? 'Unavailable' : elapsedStr,
     submittedLabel: Number.isNaN(submitTime)
       ? 'Unknown submission time'
       : new Date(submittedAt).toLocaleString(),
@@ -66,7 +64,24 @@ function getCaseAgeInfo(submittedAt: string) {
 
 export const ReviewerGrievanceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  // A new case gets its own draft, request lifecycle, and dialog state.
+  return <CaseReview key={id} id={id} />;
+};
+
+function CaseReview({ id }: { id: string | undefined }) {
   const navigate = useNavigate();
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const pendingRequest = useRef<AbortController>();
+  const detailRequest = useRef<AbortController>();
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      pendingRequest.current?.abort();
+      detailRequest.current?.abort();
+    };
+  }, []);
 
   // Detail & Categories State
   const [grievance, setGrievance] = useState<GrievanceDetailResponse | null>(null);
@@ -80,6 +95,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
   const [overridePriority, setOverridePriority] = useState<TriagePriority | ''>('');
   const [reviewNote, setReviewNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -235,8 +251,12 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
   }, []);
 
   const fetchDetail = useCallback(
-    async (showLoadingSpinner = true, signal?: AbortSignal) => {
+    async (showLoadingSpinner = true) => {
       if (!id) return;
+      detailRequest.current?.abort();
+      const controller = new AbortController();
+      detailRequest.current = controller;
+      const { signal } = controller;
       if (showLoadingSpinner) {
         setIsLoading(true);
       }
@@ -247,18 +267,20 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
           getGrievanceById(id, signal),
           getProductCategories(signal).catch(() => ({ categories: [] })),
         ]);
+        if (signal.aborted) return;
         setGrievance(detailData);
         if (catData.categories && catData.categories.length > 0) {
           setCategories(catData.categories);
         }
       } catch (err) {
+        if (signal.aborted) return;
         if (err instanceof ApiError) {
           setLoadError(err.message || `Failed to load grievance details (${err.status})`);
         } else if (err instanceof Error && err.name !== 'AbortError') {
           setLoadError(err.message);
         }
       } finally {
-        if (showLoadingSpinner) {
+        if (showLoadingSpinner && !signal.aborted) {
           setIsLoading(false);
         }
       }
@@ -267,14 +289,12 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchDetail(true, controller.signal);
-    return () => controller.abort();
+    void fetchDetail();
   }, [fetchDetail]);
 
-  const handleCopyId = () => {
-    if (!id) return;
-    navigator.clipboard.writeText(id);
+  const handleCopyId = async () => {
+    if (!id || !navigator.clipboard) return;
+    try { await navigator.clipboard.writeText(id); } catch { return; }
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
   };
@@ -286,45 +306,53 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
     setSuccessMessage(null);
   };
 
-  // Find next pending case in queue
-  const navigateNextPending = async () => {
+  // Follow the same newest-first ordering across server pages as the queue.
+  const navigatePending = async (direction: 'next' | 'previous', afterDecision = false) => {
+    pendingRequest.current?.abort();
+    const controller = new AbortController();
+    pendingRequest.current = controller;
+    setNavigationError(null);
+    let previous: string | undefined;
+    let found = false;
     try {
-      const page = await listGrievances({ status: 'PENDING_REVIEW', size: 20 });
-      const nextCase = page.content.find((g) => g.id !== id);
-      if (nextCase) {
-        navigate(`/reviewer/grievances/${nextCase.id}`);
-      } else {
-        navigate('/reviewer');
-      }
-    } catch {
-      navigate('/reviewer');
-    }
-  };
-
-  const navigatePreviousPending = async () => {
-    try {
-      const page = await listGrievances({ status: 'PENDING_REVIEW', size: 20 });
-      const currentIndex = page.content.findIndex((g) => g.id === id);
-      if (currentIndex > 0) {
-        const prevCase = page.content[currentIndex - 1];
-        if (prevCase) {
-          navigate(`/reviewer/grievances/${prevCase.id}`);
+      for (let number = 0; ; number++) {
+        const page = await listGrievances({ status: 'PENDING_REVIEW', page: number, size: 100 }, controller.signal);
+        if (controller.signal.aborted) return;
+        for (const row of page.content) {
+          if ((afterDecision || grievance?.status !== 'PENDING_REVIEW') && direction === 'next' && row.id !== id) {
+            navigate('/reviewer/grievances/' + row.id);
+            return;
+          }
+          if (found && direction === 'next') {
+            navigate('/reviewer/grievances/' + row.id);
+            return;
+          }
+          if (row.id === id) {
+            if (direction === 'previous') {
+              if (previous) navigate('/reviewer/grievances/' + previous);
+              return;
+            }
+            found = true;
+          }
+          previous = row.id;
         }
+        if (page.last || !page.content.length || number + 1 >= page.totalPages) break;
       }
+      if (direction === 'next') navigate('/reviewer');
     } catch {
-      // ignore
+      if (!controller.signal.aborted) setNavigationError('Could not open the pending queue. Return to the complaint queue to try again.');
     }
   };
 
   // Register safe keyboard shortcuts (Priority 2)
   useTriageShortcuts({
-    onNext: navigateNextPending,
-    onPrevious: navigatePreviousPending,
+    onNext: () => navigatePending('next'),
+    onPrevious: () => navigatePending('previous'),
     onSelectApprove: () => handleActionChange('APPROVE'),
     onSelectOverride: () => handleActionChange('OVERRIDE'),
     onSelectReject: () => handleActionChange('REJECT'),
     onToggleHelp: () => setShowShortcutsHelp((prev) => !prev),
-    enabled: !isWhatIfOpen && !isLoading,
+    enabled: !isWhatIfOpen && !isMobileSheetOpen && !showShortcutsHelp && !isLoading && !isSubmitting,
   });
 
   const executeReviewSubmission = async (andNext: boolean = false): Promise<boolean> => {
@@ -375,10 +403,11 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
       }
 
       await reviewGrievance(id, payload);
+      if (!mounted.current) return false;
       setSuccessMessage(`Successfully submitted decision: ${selectedAction}`);
 
       if (andNext) {
-        await navigateNextPending();
+        await navigatePending('next', true);
       } else {
         await fetchDetail(false);
         setReviewNote('');
@@ -387,14 +416,13 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
       }
       return true;
     } catch (err) {
+      if (!mounted.current) return false;
       if (err instanceof ApiError && err.status === 409) {
         setConflictError(
-          'Conflict (HTTP 409): Another reviewer has updated this grievance while you were reviewing it. The grievance details have been refreshed with the latest version. Please review the updated information and submit your decision again.'
+          'Another reviewer updated this case. Check the latest status and your draft before submitting again.'
         );
+        setIsMobileSheetOpen(false);
         await fetchDetail(false);
-        setReviewNote('');
-        setOverrideCategory('');
-        setOverridePriority('');
       } else if (err instanceof ApiError) {
         setSubmitError(err.message || `Review submission failed (${err.status})`);
       } else if (err instanceof Error) {
@@ -471,28 +499,10 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
   const isTerminalState =
     grievance.status === 'APPROVED' ||
     grievance.status === 'OVERRIDDEN' ||
-    grievance.status === 'REJECTED' ||
-    grievance.status === 'AUTO_ROUTED';
+    grievance.status === 'REJECTED';
 
   const caseAge = getCaseAgeInfo(grievance.submittedAt);
   const prediction = grievance.originalPrediction;
-
-  // Review triggers
-  const triggers: Array<{ label: string; isDanger: boolean }> = [];
-  if (prediction) {
-    if (prediction.confidence < 0.55) {
-      triggers.push({ label: 'LOW_CONFIDENCE (<55%)', isDanger: false });
-    }
-    if (prediction.margin < 0.15) {
-      triggers.push({ label: 'SMALL_MARGIN (<15%)', isDanger: false });
-    }
-    if (grievance.priority === 'CRITICAL') {
-      triggers.push({ label: 'CRITICAL_PRIORITY_POLICY', isDanger: true });
-    }
-    if (!grievance.reviewRequired) {
-      triggers.push({ label: 'AUTO_ROUTED', isDanger: false });
-    }
-  }
 
   const renderDecisionForm = (isMobile: boolean) => {
     const isInactiveDesktopForm = !isMobile && isMobileSheetOpen;
@@ -535,13 +545,14 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
         {/* Action Selector Buttons */}
         <div>
           <Label className="text-xs font-semibold text-slate-700">
-            Adjudication Action
+            Review action
           </Label>
           <div className="grid grid-cols-3 gap-2 mt-1.5">
             <button
               type="button"
               disabled={isSubmitting || isInactiveDesktopForm}
               tabIndex={isInactiveDesktopForm ? -1 : undefined}
+              aria-pressed={selectedAction === 'APPROVE'}
               onClick={() => handleActionChange('APPROVE')}
               className={`py-2 px-2 text-xs font-bold rounded-lg border transition-all text-center ${
                 selectedAction === 'APPROVE'
@@ -556,6 +567,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
               type="button"
               disabled={isSubmitting || isInactiveDesktopForm}
               tabIndex={isInactiveDesktopForm ? -1 : undefined}
+              aria-pressed={selectedAction === 'OVERRIDE'}
               onClick={() => handleActionChange('OVERRIDE')}
               className={`py-2 px-2 text-xs font-bold rounded-lg border transition-all text-center ${
                 selectedAction === 'OVERRIDE'
@@ -570,6 +582,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
               type="button"
               disabled={isSubmitting || isInactiveDesktopForm}
               tabIndex={isInactiveDesktopForm ? -1 : undefined}
+              aria-pressed={selectedAction === 'REJECT'}
               onClick={() => handleActionChange('REJECT')}
               className={`py-2 px-2 text-xs font-bold rounded-lg border transition-all text-center ${
                 selectedAction === 'REJECT'
@@ -677,6 +690,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
           <textarea
             id={isMobile ? 'mobile-review-note' : 'review-note'}
             rows={3}
+            aria-required={selectedAction !== 'APPROVE'}
             maxLength={1000}
             disabled={isSubmitting || isInactiveDesktopForm}
             tabIndex={isInactiveDesktopForm ? -1 : undefined}
@@ -737,7 +751,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
       <div className="space-y-6 pb-28 lg:pb-0">
         {/* Navigation & Top Sticky Command Bar */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
               to="/reviewer"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-900 transition-colors"
@@ -759,35 +773,28 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
                 Shortcuts [?]
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsWhatIfOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-all shadow-2xs"
-              >
-                <Sparkles size={14} className="text-teal-600" />
-                What-If Sandbox
-              </button>
+
             </div>
           </div>
 
           {/* Sticky Command Bar Header */}
-          <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-slate-200/90 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="bg-white rounded-2xl p-4 md:p-5 border border-slate-200/90 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-slate-900 font-mono">
+                <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-ink">
                   Case #{grievance.id.substring(0, 8)}
                 </h1>
 
                 <button
                   type="button"
                   onClick={handleCopyId}
-                  className="p-1 rounded text-slate-400 hover:text-slate-700 transition-colors"
+                  className="p-2 rounded text-slate-600 hover:text-slate-700 transition-colors"
                   title="Copy full UUID"
                 >
                   {copiedId ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
                 </button>
 
-                <Badge variant="default" size="sm" className="font-mono bg-slate-100 text-slate-700">
+                <Badge variant="default" size="sm" title="Case version" className="font-mono bg-slate-100 text-slate-700">
                   v{grievance.version}
                 </Badge>
                 <StatusIndicator status={grievance.status} size="sm" />
@@ -808,41 +815,28 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Review Trigger Badges */}
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                {triggers.map((t, idx) => (
-                  <span
-                    key={idx}
-                    className={`inline-flex items-center text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                      t.isDanger
-                        ? 'bg-rose-50 text-rose-800 border-rose-200'
-                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                    }`}
-                  >
-                    {t.label}
-                  </span>
-                ))}
-              </div>
+              <p className="mt-2 text-sm text-ink-muted">{grievance.assignedCategory}</p>
             </div>
 
             {/* Case age is descriptive only; no legal or contractual deadline is configured. */}
             <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
               <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-                <span className="text-slate-400">Case age: </span>
+                <span className="text-ink-muted">Case age: </span>
                 <span className="font-bold text-slate-800 tabular-nums">{caseAge.elapsedStr}</span>
               </div>
 
               <div className="px-3 py-1.5 rounded-xl border flex items-center gap-1.5 bg-slate-50 border-slate-200 text-slate-700">
                 <Clock size={13} className="text-slate-500" />
-                <span title={caseAge.submittedLabel}>No review deadline configured</span>
+                <span title={caseAge.submittedLabel}>Submitted {caseAge.submittedLabel}</span>
               </div>
             </div>
           </div>
         </div>
 
+        {navigationError && <Alert variant="danger">{navigationError}</Alert>}
         {/* Feedback Alerts */}
         {conflictError && (
-          <Alert variant="danger" title="Concurrent Modification Conflict (HTTP 409)">
+          <Alert variant="danger" title="Case changed during review">
             <div className="space-y-2">
               <p>{conflictError}</p>
               <Button
@@ -868,139 +862,18 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Investigation Pane (lg:col-span-7 xl:col-span-8 space-y-6) */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6">
-            {/* ZONE A — Immutable Original Case (Baseline Anchor) */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-              <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
-                    <FileCheck size={18} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-bold text-slate-900">
-                        Zone A — Original Complaint Narrative
-                      </h2>
-                      <Badge variant="success" size="sm" className="font-mono text-[10px]">
-                        IMMUTABLE PERSISTED RECORD
-                      </Badge>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Baseline persisted intake record. Invariant across counterfactual simulations.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
-                  <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full border border-slate-200">
-                    Version #{grievance.version}
-                  </span>
-                  <span className="bg-teal-50 text-teal-800 px-2.5 py-0.5 rounded-full border border-teal-200">
-                    Case age: {caseAge.elapsedStr}
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="p-4 bg-slate-50/90 border border-slate-200/80 rounded-xl text-slate-900 text-sm leading-relaxed whitespace-pre-wrap font-sans selection:bg-teal-100 shadow-2xs">
-                  {grievance.narrative}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 border border-slate-200/70 rounded-xl text-[11px] text-slate-600 font-mono">
-                  <span>Model Provenance: {prediction?.modelUsed || 'TF-IDF + Logistic Regression'}</span>
-                  <span>Artifact: {prediction?.modelVersion?.substring(0, 16) || 'active-checkpoint'}</span>
-                </div>
-
-                <div className="flex items-start gap-2.5 p-3.5 bg-amber-50/70 text-xs text-amber-800 rounded-xl border border-amber-200/70">
-                  <ShieldAlert size={16} className="text-amber-700 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-amber-900">Confidentiality Protocol:</span>{' '}
-                    Narrative content contains citizen disclosures. Restricted to authorized staff for adjudication.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Active XAI Feature Reset Badge */}
-            {activeFeature && (
-              <div
-                data-testid="xai-active-feature-badge"
-                className="flex items-center justify-between p-3 bg-teal-50/90 border border-teal-200/90 rounded-xl text-xs text-teal-900 transition-all shadow-2xs"
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-teal-950">Active XAI Focus:</span>
-                  <span className="font-mono bg-white px-2 py-0.5 rounded-md border border-teal-300 font-bold text-teal-800 shadow-2xs">
-                    {activeFeature}
-                  </span>
-                  <span className="text-slate-500 text-[11px] hidden sm:inline">
-                    (Highlighted across narrative and contribution chart)
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleResetFeature}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-teal-800 hover:text-teal-950 bg-white hover:bg-teal-100 rounded-lg border border-teal-300 transition-all shadow-2xs"
-                  aria-label="Reset active feature"
-                >
-                  <X size={13} />
-                  Reset Filter
-                </button>
-              </div>
-            )}
-
-            {/* Contextual In-Text Linear Attribution Highlighter */}
-            <LinearAttributionHighlighter
-              narrative={grievance.narrative}
-              topPositiveFeatures={prediction?.explanation?.topPositiveFeatures}
-              topNegativeFeatures={prediction?.explanation?.topNegativeFeatures}
-              topDifferenceFeatures={prediction?.explanation?.topDifferenceFeatures}
-              priorityReasons={prediction?.priorityReasons}
-              activeFeature={activeFeature}
-              onFeatureHover={handleFeatureHover}
-              onFeatureSelect={handleFeatureSelect}
-            />
-
-            {/* Explainable AI Prediction & Triage Analysis */}
+            <section className="min-w-0 rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <h2 className="text-lg font-semibold text-ink">Original complaint</h2>
+              <p className="mt-4 whitespace-pre-wrap break-words text-base leading-relaxed text-ink">{grievance.narrative}</p>
+            </section>
             <ExplainableAiCard prediction={prediction} />
-
-            {/* Diverging Feature Contribution Profile */}
-            {prediction?.explanation && (
-              <DivergingFeatureBarChart
-                positiveFeatures={prediction.explanation.topPositiveFeatures}
-                negativeFeatures={prediction.explanation.topNegativeFeatures}
-                predictedClass={prediction.explanation.predictedClass}
-                runnerUpClass={prediction.explanation.runnerUpClass}
-                activeFeature={activeFeature}
-                onFeatureHover={handleFeatureHover}
-                onFeatureSelect={handleFeatureSelect}
-              />
-            )}
-
-            {/* 8-Class Probability & Top-2 Margin Meter */}
-            {prediction && (
-              <ProbabilityMarginMeter
-                probabilities={prediction.probabilities || {}}
-                predictedCategory={prediction.predictedCategory}
-                confidence={prediction.confidence}
-                margin={prediction.margin}
-              />
-            )}
-
-            {/* ─── FLAGSHIP SUITE: Decision Intelligence Lab (Zone B & Zone C) ─── */}
-            <DecisionIntelligenceLab
-              originalNarrative={grievance.narrative}
-              originalPrediction={grievance.originalPrediction}
-              grievanceId={grievance.id}
-              onAppendReviewNote={(text) => {
-                setReviewNote((prev) => (prev ? `${prev}\n\n${text}` : text));
-              }}
-            />
           </div>
 
           {/* Right Sticky Decision & Audit Dock (35% width: lg:5 / xl:4 of 12 cols) */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6">
-            {/* Sticky Review Decision Dock (sticky top-20 below header) */}
+            {/* Sticky Review decision (sticky top-20 below header) */}
             <div
-              className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sticky top-20 z-20"
+              className="bg-white rounded-xl border border-line p-5 sm:p-6"
               aria-hidden={isMobileSheetOpen ? 'true' : undefined}
               {...(isMobileSheetOpen ? { inert: '' } : {})}
             >
@@ -1010,10 +883,10 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">
-                    Review Decision Dock
+                    Review decision
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    Adjudicate case status and routing assignments.
+                    Confirm or change the routing recommendation.
                   </p>
                 </div>
               </div>
@@ -1024,7 +897,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
             </div>
 
             {/* Chronological Immutable Audit Timeline wrapped with max-h-[380px] overflow-y-auto */}
-            <div className="max-h-[380px] overflow-y-auto pr-1 rounded-2xl">
+            <div className="min-w-0 break-words">
               <AuditTimeline
                 auditHistory={grievance.auditHistory}
                 submittedAt={grievance.submittedAt}
@@ -1034,12 +907,104 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+        <section className="rounded-xl border border-line bg-surface p-4 sm:p-6">
+          <h2>
+            <button type="button" aria-expanded={analysisOpen} aria-controls="supporting-analysis"
+              onClick={() => setAnalysisOpen(open => !open)}
+              className="flex w-full items-center justify-between gap-3 text-left text-lg font-semibold text-ink">
+              Supporting analysis and simulations <span aria-hidden="true">{analysisOpen ? '−' : '+'}</span>
+            </button>
+          </h2>
+          <div id="supporting-analysis" hidden={!analysisOpen}>
+            {analysisOpen && <div className="mt-4 space-y-5">
+              <button
+                type="button"
+                onClick={() => setIsWhatIfOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-all shadow-2xs"
+              >
+                <Sparkles size={14} className="text-teal-600" />
+                What-If Sandbox
+              </button>
+              {/* Active XAI Feature Reset Badge */}
+              {activeFeature && (
+                <div
+                  data-testid="xai-active-feature-badge"
+                  className="flex items-center justify-between p-3 bg-teal-50/90 border border-teal-200/90 rounded-xl text-xs text-teal-900 transition-all shadow-2xs"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-teal-950">Active XAI Focus:</span>
+                    <span className="font-mono bg-white px-2 py-0.5 rounded-md border border-teal-300 font-bold text-teal-800 shadow-2xs">
+                      {activeFeature}
+                    </span>
+                    <span className="text-slate-500 text-[11px] hidden sm:inline">
+                      (Highlighted across narrative and contribution chart)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetFeature}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-teal-800 hover:text-teal-950 bg-white hover:bg-teal-100 rounded-lg border border-teal-300 transition-all shadow-2xs"
+                    aria-label="Reset active feature"
+                  >
+                    <X size={13} />
+                    Reset Filter
+                  </button>
+                </div>
+              )}
+
+              {/* Contextual In-Text Linear Attribution Highlighter */}
+              <LinearAttributionHighlighter
+                narrative={grievance.narrative}
+                topPositiveFeatures={prediction?.explanation?.topPositiveFeatures}
+                topNegativeFeatures={prediction?.explanation?.topNegativeFeatures}
+                topDifferenceFeatures={prediction?.explanation?.topDifferenceFeatures}
+                priorityReasons={prediction?.priorityReasons}
+                activeFeature={activeFeature}
+                onFeatureHover={handleFeatureHover}
+                onFeatureSelect={handleFeatureSelect}
+              />
+
+              {/* Diverging Feature Contribution Profile */}
+              {prediction?.explanation && (
+                <DivergingFeatureBarChart
+                  positiveFeatures={prediction.explanation.topPositiveFeatures}
+                  negativeFeatures={prediction.explanation.topNegativeFeatures}
+                  predictedClass={prediction.explanation.predictedClass}
+                  runnerUpClass={prediction.explanation.runnerUpClass}
+                  activeFeature={activeFeature}
+                  onFeatureHover={handleFeatureHover}
+                  onFeatureSelect={handleFeatureSelect}
+                />
+              )}
+
+              {/* 8-Class Probability & Top-2 Margin Meter */}
+              {prediction && (
+                <ProbabilityMarginMeter
+                  probabilities={prediction.probabilities || {}}
+                  predictedCategory={prediction.predictedCategory}
+                  confidence={prediction.confidence}
+                  margin={prediction.margin}
+                />
+              )}
+
+              {/* ─── FLAGSHIP SUITE: Decision Intelligence Lab (Zone B & Zone C) ─── */}
+              <DecisionIntelligenceLab
+                originalNarrative={grievance.narrative}
+                originalPrediction={grievance.originalPrediction}
+                grievanceId={grievance.id}
+                onAppendReviewNote={(text) => {
+                  setReviewNote((prev) => (prev ? `${prev}\n\n${text}` : text));
+                }}
+              />
+            </div>}
+          </div>
+        </section>
       </div>
 
       {/* Pinned Bottom Decision Bar for Mobile (<1024px) */}
-      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg">
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg">
         <div className="flex items-center justify-between gap-3 max-w-lg mx-auto">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <StatusIndicator status={grievance.status} size="sm" />
             <StatusIndicator priority={grievance.priority} size="sm" />
           </div>
@@ -1087,7 +1052,7 @@ export const ReviewerGrievanceDetailPage: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">
-                    Review Decision Dock
+                    Review decision
                   </h2>
                   <p className="text-[11px] text-slate-500">
                     Mobile Adjudication Sheet

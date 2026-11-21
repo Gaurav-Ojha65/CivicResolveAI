@@ -1,102 +1,58 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { createBrowserRouter, Outlet, useLocation, useMatches, useNavigation } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { SubmitGrievancePage } from '../features/grievances/SubmitGrievancePage';
-import { TrackGrievancePage } from '../features/tracking/TrackGrievancePage';
-import { LoginPage } from '../features/reviewer/LoginPage';
-import { ReviewerDashboardPage } from '../features/reviewer/ReviewerDashboardPage';
-import { ReviewerGrievanceDetailPage } from '../features/reviewer/ReviewerGrievanceDetailPage';
-import { ModelAuditPage } from '../features/reviewer/ModelAuditPage';
-import { ExecutiveAnalyticsPage } from '../features/reviewer/ExecutiveAnalyticsPage';
 import { ProtectedRoute } from '../features/reviewer/ProtectedRoute';
 import { ErrorBoundary } from '../components/layout/ErrorBoundary';
 import { PublicLayout } from '../components/layout/PublicLayout';
 
-export const router = createBrowserRouter([
-  {
-    path: '/',
-    element: (
-      <ErrorBoundary>
-        <PublicLayout>
-          <LandingPage />
-        </PublicLayout>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/submit',
-    element: (
-      <ErrorBoundary>
-        <PublicLayout>
-          <SubmitGrievancePage />
-        </PublicLayout>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/track',
-    element: (
-      <ErrorBoundary>
-        <PublicLayout>
-          <TrackGrievancePage />
-        </PublicLayout>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/reviewer/login',
-    element: (
-      <ErrorBoundary>
-        <LoginPage />
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/reviewer',
-    element: (
-      <ErrorBoundary>
-        <ProtectedRoute>
-          <ReviewerDashboardPage />
-        </ProtectedRoute>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/reviewer/grievances/:id',
-    element: (
-      <ErrorBoundary>
-        <ProtectedRoute>
-          <ReviewerGrievanceDetailPage />
-        </ProtectedRoute>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/reviewer/audit',
-    element: (
-      <ErrorBoundary>
-        <ProtectedRoute>
-          <ModelAuditPage />
-        </ProtectedRoute>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '/reviewer/analytics',
-    element: (
-      <ErrorBoundary>
-        <ProtectedRoute>
-          <ExecutiveAnalyticsPage />
-        </ProtectedRoute>
-      </ErrorBoundary>
-    ),
-  },
-  {
-    path: '*',
-    element: (
-      <ErrorBoundary>
-        <NotFoundPage />
-      </ErrorBoundary>
-    ),
-  },
-]);
+function RouteFrame() {
+  const { pathname } = useLocation();
+  const matches = useMatches();
+  const page = matches[matches.length - 1]?.handle as { title: string } | undefined;
+  const title = page?.title ?? 'Financial complaints';
+  const navigation = useNavigation();
+  const previousPath = useRef(pathname);
+
+  useEffect(() => {
+    document.title = title + ' | CivicResolve AI';
+    if (previousPath.current !== pathname) {
+      previousPath.current = pathname;
+      document.getElementById('main-content')?.focus({ preventScroll: true });
+      window.scrollTo(0, 0);
+    }
+  }, [pathname, title]);
+
+  return (
+    <ErrorBoundary key={pathname}>
+      {navigation.state === 'loading' && <p role="status" className="sr-only">Loading page…</p>}
+      <Outlet />
+    </ErrorBoundary>
+  );
+}
+
+export const router = createBrowserRouter([{
+  element: <RouteFrame />,
+  children: [
+    {
+      element: <PublicLayout><Outlet /></PublicLayout>,
+      children: [
+        { index: true, element: <LandingPage />, handle: { title: 'Financial complaints' } },
+        { path: 'submit', handle: { title: 'Submit a complaint' }, lazy: async () => ({ Component: (await import('../features/grievances/SubmitGrievancePage')).SubmitGrievancePage }) },
+        { path: 'track', handle: { title: 'Track a complaint' }, lazy: async () => ({ Component: (await import('../features/tracking/TrackGrievancePage')).TrackGrievancePage }) },
+        { path: '*', element: <NotFoundPage />, handle: { title: 'Page not found' } },
+      ],
+    },
+    { path: 'reviewer/login', handle: { title: 'Reviewer sign in' }, lazy: async () => ({ Component: (await import('../features/reviewer/LoginPage')).LoginPage }) },
+    {
+      path: 'reviewer',
+      element: <ProtectedRoute><Outlet /></ProtectedRoute>,
+      children: [
+        { index: true, handle: { title: 'Complaint queue' }, lazy: async () => ({ Component: (await import('../features/reviewer/ReviewerDashboardPage')).ReviewerDashboardPage }) },
+        { path: 'grievances/:id', handle: { title: 'Case review' }, lazy: async () => ({ Component: (await import('../features/reviewer/ReviewerGrievanceDetailPage')).ReviewerGrievanceDetailPage }) },
+        { path: 'analytics', handle: { title: 'Executive analytics' }, lazy: async () => ({ Component: (await import('../features/reviewer/ExecutiveAnalyticsPage')).ExecutiveAnalyticsPage }) },
+        { path: 'audit', handle: { title: 'Model audit' }, lazy: async () => ({ Component: (await import('../features/reviewer/ModelAuditPage')).ModelAuditPage }) },
+      ],
+    },
+  ],
+}]);

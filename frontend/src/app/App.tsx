@@ -6,7 +6,7 @@ import { AuthProvider } from './providers/AuthProvider';
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <RouterProvider router={router} fallbackElement={<p role="status" className="p-6 text-ink-muted">Loading page…</p>} />
     </AuthProvider>
   );
 };

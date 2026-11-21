@@ -172,6 +172,11 @@ describe('Monte Carlo Queue & AI Policy Stress Engine', () => {
 });
 
 describe('MonteCarloStressLab UI Component', () => {
+  it('reports missing inputs instead of simulating invented arrivals', () => {
+    render(<MonteCarloStressLab analyticsData={null} />);
+    expect(screen.getByText(/needs recorded intake history/)).toBeVisible();
+    expect(screen.queryByTestId('mc-fan-chart-svg')).not.toBeInTheDocument();
+  });
   it('Test 5: UI Rendering & Interaction — Renders all 3 SVG charts, scenario presets, and updates on slider adjustments', () => {
     render(<MonteCarloStressLab analyticsData={MOCK_ANALYTICS} />);
 
@@ -197,8 +202,8 @@ describe('MonteCarloStressLab UI Component', () => {
     expect(screen.getByTestId('mc-policy-frontier-svg')).toBeInTheDocument();
 
     // Check Scenario Presets are present
-    expect(screen.getByText('Production Baseline')).toBeInTheDocument();
-    expect(screen.getByText('2.2x Regulatory Foreclosure Surge')).toBeInTheDocument();
+    expect(screen.getByText('Baseline scenario')).toBeInTheDocument();
+    expect(screen.getByText('2.2× intake surge')).toBeInTheDocument();
     expect(screen.getByText('Conservative Audit Policy')).toBeInTheDocument();
     expect(screen.getByText('Understaffed Shift Stress')).toBeInTheDocument();
 
@@ -209,7 +214,7 @@ describe('MonteCarloStressLab UI Component', () => {
     expect(screen.getByTestId('reviewer-count-display')).toHaveTextContent('3 Reviewers');
 
     // Reset button restores to baseline (6 Reviewers)
-    const resetBtn = screen.getByRole('button', { name: /reset to live telemetry/i });
+    const resetBtn = screen.getByRole('button', { name: /reset scenario/i });
     fireEvent.click(resetBtn);
     expect(screen.getByTestId('reviewer-count-display')).toHaveTextContent('6 Reviewers');
 

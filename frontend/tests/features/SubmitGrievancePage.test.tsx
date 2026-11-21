@@ -10,10 +10,11 @@
  *  - Form data preserved on 400 validation errors.
  *  - MIN_LENGTH is 20 characters.
  */
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { PublicLayout } from '../../src/components/layout/PublicLayout';
 import { SubmitGrievancePage } from '../../src/features/grievances/SubmitGrievancePage';
 import { ApiError } from '../../src/lib/errors/api-error';
 import type { GrievanceSubmissionResponse } from '../../src/types/grievance';
@@ -42,10 +43,10 @@ const MOCK_RESPONSE: GrievanceSubmissionResponse = {
 const VALID_DESCRIPTION =
   'I was charged a duplicate payment for my mortgage account and have not received a refund after 30 days.';
 
-function renderPage() {
+function renderPage(includeNavigation = false) {
   return render(
     <MemoryRouter initialEntries={['/submit']}>
-      <SubmitGrievancePage />
+      {includeNavigation ? <PublicLayout><SubmitGrievancePage /></PublicLayout> : <SubmitGrievancePage />}
     </MemoryRouter>
   );
 }
@@ -163,7 +164,7 @@ describe('SubmitGrievancePage', () => {
 
   // ── Print styles ──────────────────────────────────────────────────────────
   it('applies print:hidden utility to header and footer', () => {
-    const { container } = renderPage();
+    const { container } = renderPage(true);
     const header = container.querySelector('header');
     const footer = container.querySelector('footer');
 
@@ -187,10 +188,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     const submitBtn = screen.getByRole('button', { name: /submit complaint/i });
 
@@ -212,10 +210,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     const submitBtn = screen.getByRole('button', { name: /submit complaint/i });
     await userEvent.click(submitBtn);
@@ -229,10 +224,7 @@ describe('SubmitGrievancePage', () => {
   it('calls submitGrievance with only { description } — not the category', async () => {
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -255,10 +247,7 @@ describe('SubmitGrievancePage', () => {
   it('shows the submission receipt on a successful response', async () => {
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -284,10 +273,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -319,10 +305,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -349,10 +332,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -378,10 +358,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -407,10 +384,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -436,10 +410,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -459,10 +430,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 
@@ -482,10 +450,7 @@ describe('SubmitGrievancePage', () => {
 
     renderPage();
 
-    await userEvent.type(
-      screen.getByRole('textbox', { name: /complaint description/i }),
-      VALID_DESCRIPTION
-    );
+    fireEvent.change(screen.getByRole('textbox', { name: /complaint description/i }), { target: { value: VALID_DESCRIPTION } });
 
     await userEvent.click(screen.getByRole('button', { name: /submit complaint/i }));
 

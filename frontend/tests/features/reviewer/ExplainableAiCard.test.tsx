@@ -6,7 +6,7 @@
  *  - Stage 4 explanation empty state.
  *  - Stage 4 feature attribution decomposition (linear contributions, decision scores, margin, SHA-256).
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { ExplainableAiCard } from '../../../src/features/reviewer/components/ExplainableAiCard';
 import type { PredictionSummary } from '../../../src/types/grievance';
@@ -84,7 +84,7 @@ describe('ExplainableAiCard', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders standard prediction metrics and Stage 4 placeholder when explanation is absent', () => {
+  it('renders recorded prediction metrics and an unavailable state when explanation is absent', () => {
     render(<ExplainableAiCard prediction={BASE_PREDICTION} />);
 
     expect(screen.getAllByText('Mortgage').length).toBeGreaterThanOrEqual(1);
@@ -94,11 +94,12 @@ describe('ExplainableAiCard', () => {
     expect(screen.getByText('High financial threshold')).toBeInTheDocument();
     expect(screen.getByText('Escrow foreclosure risk')).toBeInTheDocument();
     expect(screen.getByText('NEGATIVE')).toBeInTheDocument();
-    expect(screen.getByText(/explainable ai attribution \(ready for stage 4\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/feature contributions unavailable/i)).toBeInTheDocument();
   });
 
   it('renders linear feature decomposition when Stage 4 explanation is present', () => {
     render(<ExplainableAiCard prediction={PREDICTION_WITH_EXPLANATION} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand XAI details' }));
 
     // Decision scores
     expect(screen.getByText('3.4512')).toBeInTheDocument();
@@ -151,6 +152,7 @@ describe('ExplainableAiCard', () => {
     };
 
     render(<ExplainableAiCard prediction={predictionWithoutTfidf} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand XAI details' }));
 
     // Renders features and contributions cleanly
     expect(screen.getByText('escrow')).toBeInTheDocument();
@@ -189,6 +191,7 @@ describe('ExplainableAiCard', () => {
     };
 
     render(<ExplainableAiCard prediction={predictionWithNullTfidf} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand XAI details' }));
     expect(screen.getByText('escrow')).toBeInTheDocument();
     expect(screen.getByText('+1.0446')).toBeInTheDocument();
     expect(screen.queryByText(/tf-idf:/i)).not.toBeInTheDocument();

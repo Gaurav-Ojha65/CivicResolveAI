@@ -32,6 +32,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
   const [seedSuccessMessage, setSeedSuccessMessage] = useState<string | null>(null);
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null);
   const [selectedHorizon, setSelectedHorizon] = useState<TimeHorizon>('14D');
+  const [showSimulation, setShowSimulation] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
@@ -39,26 +40,33 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
   const seedTriggerRef = useRef<HTMLButtonElement | null>(null);
   const seedDialogRef = useRef<HTMLDivElement | null>(null);
 
+  const activeRequest = useRef<AbortController | null>(null);
   const fetchTelemetry = useCallback(async () => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const res = await getExecutiveAnalytics();
+      const res = await getExecutiveAnalytics(controller.signal);
+      if (controller.signal.aborted) return;
       setData(res);
       const now = new Date();
       setLastRefreshed(
         now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       );
     } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       const message = err instanceof Error ? err.message : 'Failed to retrieve executive analytics';
       setError(message);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchTelemetry();
+    return () => activeRequest.current?.abort();
   }, [fetchTelemetry]);
 
   // Focus management and Escape handler for Seeding Confirmation Dialog
@@ -116,7 +124,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
     setShowSeedModal(false);
     try {
       const res = await seedDemoTelemetry();
-      setSeedSuccessMessage(res.message || 'Seeded 32 authentic CFPB complaints across all 8 categories.');
+      setSeedSuccessMessage(`Synthetic demo batch complete. ${res.recordsCreated} new cases added.`);
       await fetchTelemetry();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to seed demo complaints';
@@ -219,11 +227,11 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
   return (
     <ReviewerLayout
       title="Executive Operations & Analytics"
-      subtitle="Operational telemetry, triage automation velocity, queue age, and calibration distribution"
+      subtitle="Complaint intake, reviewer decisions and pending case age."
       onRefresh={fetchTelemetry}
       isRefreshing={loading}
     >
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+      <div className="min-w-0 space-y-6">
         {/* ========================================================================= */}
         {/* TOP RAIL: EXECUTIVE CONTEXT & REFRESH STATUS                             */}
         {/* ========================================================================= */}
@@ -235,24 +243,24 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200">
                 <Activity size={12} className="text-teal-700" />
-                On-Demand Telemetry
+                On-demand report
               </span>
-              <span className="text-[11px] text-slate-500 font-mono">
-                Point-in-Time Database Snapshot
+              <span className="text-xs text-slate-500 font-mono">
+                Based on stored cases
               </span>
             </div>
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-ink font-serif">
-              Grievance Intake &amp; AI Triage Intelligence Hub
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-ink">
+              Complaint analytics
             </h1>
             <p className="text-xs text-slate-600 flex items-center gap-1.5">
               <Info size={13} className="text-teal-700 flex-shrink-0" />
-              <span>Uncalibrated model probability estimates; operational telemetry and decision support only.</span>
+              <span>Confidence scores represent uncalibrated probability estimates.</span>
             </p>
           </div>
 
           <div className="flex items-center gap-3 flex-shrink-0">
             {lastRefreshed && (
-              <span className="text-[11px] text-slate-500 font-mono">
+              <span className="text-xs text-slate-500 font-mono">
                 Last Updated: {lastRefreshed}
               </span>
             )}
@@ -313,30 +321,33 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION A: EXECUTIVE OVERVIEW (5 KEY METRIC TILES)                       */}
         {/* ========================================================================= */}
+        {loading && !data && <p role="status" className="rounded-lg border border-line bg-white p-6 text-sm text-ink-muted">Loading complaint analytics…</p>}
+        {error && data && <p className="text-sm text-ink-muted">Showing the last successful snapshot.</p>}
+        {data && <>
         <section aria-labelledby="executive-overview-heading" className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 id="executive-overview-heading" className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">
-              Operational Health &amp; Ingestion KPIs
+            <h2 id="executive-overview-heading" className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono">
+              Queue overview
             </h2>
-            <span className="text-[11px] text-slate-400 font-mono">Point-in-Time Snapshot</span>
+            <span className="text-xs text-slate-600 font-mono">Snapshot</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {/* Metric 1: Total Volume */}
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                  Total Ingested
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Total complaints
                 </span>
                 <div className="p-1.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                   <Layers size={14} />
                 </div>
               </div>
               <div className="mt-2.5">
-                <div className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
+                <div className="text-2xl sm:text-3xl font-semibold text-ink font-mono tracking-tight tabular-nums">
                   {data ? data.totalComplaints.toLocaleString() : '—'}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-600 flex items-center gap-1">
+                <p className="mt-1 text-xs text-slate-600 flex items-center gap-1">
                   <span className="font-semibold text-teal-700 tabular-nums">{data?.pendingReview ?? 0}</span>
                   <span>pending triage review</span>
                 </p>
@@ -347,7 +358,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between gap-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Straight-Through Automation Rate
                   </span>
                   <span
@@ -355,7 +366,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                     tabIndex={0}
                     aria-label="Percentage of all ingested grievances currently classified as AUTO_ROUTED. Measures volume routing proportion, not model prediction accuracy or precision."
                     title="Percentage of all ingested grievances currently classified as AUTO_ROUTED. Measures volume routing proportion, not model prediction accuracy or precision."
-                    className="cursor-help text-slate-400 hover:text-slate-600 focus:outline-hidden"
+                    className="cursor-help text-slate-600 hover:text-slate-600 focus:outline-hidden"
                   >
                     <Info size={12} />
                   </span>
@@ -366,15 +377,15 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
               <div className="mt-2.5">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
-                    {autoRoutePct}%
+                  <span className="text-2xl sm:text-3xl font-semibold text-ink font-mono tracking-tight tabular-nums">
+                    {data.totalComplaints > 0 ? autoRoutePct + "%" : "—"}
                   </span>
-                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center">
+                  <span className="text-xs text-emerald-700 font-semibold flex items-center">
                     <ArrowUpRight size={13} />
                     Auto
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-600">
+                <p className="mt-1 text-xs text-slate-600">
                   <span className="font-mono tabular-nums font-semibold">{data?.autoRouted ?? 0}</span> straight-through cases
                 </p>
               </div>
@@ -383,7 +394,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             {/* Metric 3: Adjudicated Volume */}
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Adjudicated Volume
                 </span>
                 <div className="p-1.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
@@ -391,14 +402,14 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2.5">
-                <div className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
+                <div className="text-2xl sm:text-3xl font-semibold text-ink font-mono tracking-tight tabular-nums">
                   {humanReviewedCount}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-600 flex flex-wrap items-center gap-1">
+                <p className="mt-1 text-xs text-slate-600 flex flex-wrap items-center gap-1">
                   <span className="font-semibold text-indigo-700 tabular-nums">{approvedCount}</span> approved
-                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-600">•</span>
                   <span className="font-semibold text-amber-700 tabular-nums">{overriddenCount}</span> overrides
-                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-600">•</span>
                   <span className="font-semibold text-rose-700 tabular-nums">{rejectedCount}</span> rejected
                 </p>
               </div>
@@ -407,7 +418,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             {/* Metric 4: share of pending cases in the youngest reporting band */}
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Pending Under 24h
                 </span>
                 <div className="p-1.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
@@ -416,14 +427,14 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
               <div className="mt-2.5">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
-                    {recentPendingPct}%
+                  <span className="text-2xl sm:text-3xl font-semibold text-ink font-mono tracking-tight tabular-nums">
+                    {data.slaAgingBreakdown.totalPending > 0 ? recentPendingPct + "%" : "—"}
                   </span>
-                  <span className="text-[11px] text-purple-700 font-semibold font-mono">
+                  <span className="text-xs text-purple-700 font-semibold font-mono">
                     age band
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-600">
+                <p className="mt-1 text-xs text-slate-600">
                   <span className="font-semibold tabular-nums">{data?.slaAgingBreakdown?.onTrack ?? 0}</span> recent pending cases
                 </p>
               </div>
@@ -432,7 +443,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             {/* Metric 5: older pending-case reporting bands */}
             <div className="p-4 rounded-[10px] bg-white border border-line shadow-card flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Pending Over 24h
                 </span>
                 <div className={`p-1.5 rounded-md border ${pendingOver24Hours > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
@@ -440,12 +451,12 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 </div>
               </div>
               <div className="mt-2.5">
-                <div className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tracking-tight tabular-nums">
+                <div className="text-2xl sm:text-3xl font-semibold text-ink font-mono tracking-tight tabular-nums">
                   {pendingOver24Hours}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-600 flex flex-wrap items-center gap-1">
+                <p className="mt-1 text-xs text-slate-600 flex flex-wrap items-center gap-1">
                   <span className="font-semibold text-red-700 tabular-nums">{data?.slaAgingBreakdown?.breached ?? 0}</span> over 72h
-                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-600">•</span>
                   <span className="font-semibold text-amber-700 tabular-nums">{data?.slaAgingBreakdown?.atRisk ?? 0}</span> 24 to 72h
                 </p>
               </div>
@@ -456,7 +467,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION B: OPERATIONAL VELOCITY & TIME HORIZON FILTERS                    */}
         {/* ========================================================================= */}
-        <section aria-labelledby="operational-velocity-heading" className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
+        <section aria-labelledby="operational-velocity-heading" className="min-w-0 p-4 sm:p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-line">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -464,8 +475,8 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 <h2 id="operational-velocity-heading" className="text-sm font-bold text-ink uppercase tracking-wider">
                   {selectedHorizon === '7D' ? '7-Day' : '14-Day'} Complaint Velocity &amp; Adjudication Trend
                 </h2>
-                <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
-                  Point-in-Time Snapshot
+                <span className="text-xs font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                  Snapshot
                 </span>
               </div>
               <p className="text-xs text-slate-600">
@@ -474,12 +485,12 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             </div>
 
             {/* Segmented Time-Horizon Controls (Step 2) */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-slate-500 font-medium hidden sm:inline-block">Horizon:</span>
               <div
                 role="group"
                 aria-label="Time Horizon Range"
-                className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 shadow-2xs"
+                className="inline-flex max-w-full flex-wrap rounded-lg border border-slate-200 bg-slate-50 p-0.5"
               >
                 <button
                   type="button"
@@ -508,20 +519,20 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 <button
                   type="button"
                   disabled
-                  title="Extended historical horizons (30D) require archival storage warehouse. In-memory operational buffer retains 14 days."
+                  title="This report supplies the latest 14 days."
                   aria-disabled="true"
-                  className="px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-400 opacity-60 cursor-not-allowed"
+                  className="px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-600 opacity-60 cursor-not-allowed"
                 >
-                  30D <span className="text-[9px] font-mono">(Archived)</span>
+                  30D <span className="text-[9px] font-mono">(Unavailable)</span>
                 </button>
                 <button
                   type="button"
                   disabled
-                  title="Extended historical horizons (90D) require archival storage warehouse. In-memory operational buffer retains 14 days."
+                  title="This report supplies the latest 14 days."
                   aria-disabled="true"
-                  className="px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-400 opacity-60 cursor-not-allowed"
+                  className="px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-600 opacity-60 cursor-not-allowed"
                 >
-                  90D <span className="text-[9px] font-mono">(Archived)</span>
+                  90D <span className="text-[9px] font-mono">(Unavailable)</span>
                 </button>
               </div>
             </div>
@@ -529,7 +540,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
 
           {/* Chart Header Meta Strip & Legend */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-4 text-xs font-medium text-slate-700">
+            <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-700">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-teal-600 inline-block" />
                 <span>Total Received</span>
@@ -544,7 +555,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="text-[11px] text-slate-500 font-mono">
+            <div className="text-xs text-slate-500 font-mono">
               Displaying {displayedDailyTrends.length} historical day observations
             </div>
           </div>
@@ -554,7 +565,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             {trendPoints ? (
               <div className="w-full">
                 <svg
-                  role="img"
+                  role="group"
                   aria-label={`${selectedHorizon} Intake and Adjudication Velocity Chart`}
                   viewBox={`0 0 ${trendPoints.width} ${trendPoints.height}`}
                   className="w-full h-48 sm:h-56 overflow-visible select-none"
@@ -685,7 +696,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 {hoveredTrendIdx !== null && trendPoints.coords[hoveredTrendIdx] && (
                   <div className="mt-3 p-3 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white flex flex-wrap items-center justify-between gap-4 animate-in fade-in shadow-md">
                     <div>
-                      <span className="text-slate-400 font-mono">Date: </span>
+                      <span className="text-slate-600 font-mono">Date: </span>
                       <span className="font-bold text-white">{trendPoints.coords[hoveredTrendIdx].date}</span>
                     </div>
                     <div className="flex items-center gap-4">
@@ -713,7 +724,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               </div>
             ) : (
               <div className="h-48 flex items-center justify-center text-slate-500 text-xs">
-                No trend data available. Click &quot;Seed Realistic CFPB Demo&quot; below in System Utilities to populate historical telemetry.
+                No trend data available. Click &quot;Add demo cases&quot; below in System Utilities to populate historical telemetry.
               </div>
             )}
           </div>
@@ -721,25 +732,25 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
           {/* Operational Velocity Summary Rail */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
             <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <span className="text-[11px] text-slate-500 block">Period Total Inflow</span>
+              <span className="text-xs text-slate-500 block">Period Total Inflow</span>
               <span className="text-base font-bold text-ink font-mono tabular-nums">
                 {horizonSummary.totalInflow} cases
               </span>
             </div>
             <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <span className="text-[11px] text-slate-500 block">Period Straight-Through</span>
+              <span className="text-xs text-slate-500 block">Period Straight-Through</span>
               <span className="text-base font-bold text-sky-700 font-mono tabular-nums">
                 {horizonSummary.totalAuto} cases
               </span>
             </div>
             <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <span className="text-[11px] text-slate-500 block">Period Human Adjudicated</span>
+              <span className="text-xs text-slate-500 block">Period Human Adjudicated</span>
               <span className="text-base font-bold text-indigo-700 font-mono tabular-nums">
                 {horizonSummary.totalReviewed} cases
               </span>
             </div>
             <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <span className="text-[11px] text-slate-500 block">Avg. Daily Volume</span>
+              <span className="text-xs text-slate-500 block">Avg. Daily Volume</span>
               <span className="text-base font-bold text-teal-800 font-mono tabular-nums">
                 {horizonSummary.avgDaily} / day
               </span>
@@ -760,8 +771,8 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
                     Volume &amp; Priority Matrix (All 8 CFPB Categories)
                   </h3>
-                  <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
-                    Point-in-Time Snapshot
+                  <span className="text-xs font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                    Snapshot
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5">
@@ -804,7 +815,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                         >
                           {cat.category}
                         </span>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-ink font-bold tabular-nums">
                             {cat.total}
                           </span>
@@ -862,15 +873,15 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
           {/* Right: pending queue age and confidence calibration (1 col) */}
           <div className="space-y-6">
             {/* Operational age bands. These are descriptive, not policy deadlines. */}
-            <div className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
+            <div className="min-w-0 p-4 sm:p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Clock size={18} className="text-teal-700" />
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
                     Pending Case Age
                   </h3>
-                  <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
-                    Point-in-Time Snapshot
+                  <span className="text-xs font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                    Snapshot
                   </span>
                 </div>
                 <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -910,16 +921,16 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
             </div>
 
             {/* Confidence & Decision Margin Calibration */}
-            <div className="p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
+            <div className="min-w-0 p-4 sm:p-6 rounded-[10px] bg-white border border-line shadow-card space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={18} className="text-teal-700" />
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
-                    Confidence Calibration Bands
+                    Model confidence bands
                   </h3>
                 </div>
-                <span className="text-[10px] font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
-                  Point-in-Time Snapshot
+                <span className="text-xs font-mono font-medium text-slate-600 bg-slate-100 border border-line px-1.5 py-0.5 rounded">
+                  Snapshot
                 </span>
               </div>
 
@@ -927,7 +938,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 {/* Band 1: < 0.55 */}
                 <div>
                   <div className="flex justify-between text-slate-700 mb-1">
-                    <span className="font-medium text-red-800">&lt; 0.55 (Flagged for Review)</span>
+                    <span className="font-medium text-red-800">&lt; 0.55 (Lower confidence)</span>
                     <span className="font-mono font-bold text-ink tabular-nums">
                       {data?.confidenceSentimentBuckets.confidenceUnder55 ?? 0}
                     </span>
@@ -993,10 +1004,10 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Band 4: > 0.90 */}
+                {/* Band 4: ≥ 0.90 */}
                 <div>
                   <div className="flex justify-between text-slate-700 mb-1">
-                    <span className="font-medium text-emerald-800">&gt; 0.90 (Straight-Through Routing)</span>
+                    <span className="font-medium text-emerald-800">≥ 0.90 (Straight-Through Routing)</span>
                     <span className="font-mono font-bold text-ink tabular-nums">
                       {data?.confidenceSentimentBuckets.confidenceOver90 ?? 0}
                     </span>
@@ -1039,7 +1050,9 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION D: CAPACITY & FORECASTING (MONTE CARLO STRESS LAB)               */}
         {/* ========================================================================= */}
-        <section aria-labelledby="capacity-forecasting-heading" className="space-y-4">
+        <details className="rounded-xl border border-line bg-surface p-4 sm:p-5" onToggle={(event) => setShowSimulation(event.currentTarget.open)}>
+          <summary className="cursor-pointer text-base font-semibold text-ink">Explore a capacity simulation</summary>
+          <section aria-labelledby="capacity-forecasting-heading" className="mt-4 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h2 id="capacity-forecasting-heading" className="text-sm font-bold text-ink uppercase tracking-wider font-mono">
@@ -1049,13 +1062,15 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 Stochastic operational queue projection modeling surge scenarios, staffing assumptions, and configurable routing thresholds.
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+            <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
               Deterministic Mulberry32 PRNG
             </span>
           </div>
 
-          <MonteCarloStressLab analyticsData={data} />
-        </section>
+          {showSimulation && <MonteCarloStressLab analyticsData={data} />}
+          </section>
+        </details>
+        </>}
 
         {/* ========================================================================= */}
         {/* SECTION E: SYSTEM & DEMONSTRATION UTILITIES (DEMOTED SEEDING)            */}
@@ -1071,7 +1086,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                 System Demonstration &amp; Testing Utilities
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Administrative tools for testing and audit demonstration. Actions performed here populate deterministic sample data and are excluded from operational decision telemetry.
+                Add fictional complaints for demonstration. These cases appear in the queue and are included in the figures on this page.
               </p>
             </div>
 
@@ -1085,7 +1100,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
               className="text-xs font-semibold text-slate-700 border-slate-300 hover:bg-slate-100 flex-shrink-0 cursor-pointer"
             >
               <Database size={13} />
-              <span>Seed Realistic CFPB Demo</span>
+              <span>Add demo cases</span>
             </Button>
           </div>
         </section>
@@ -1126,7 +1141,7 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
                     setShowSeedModal(false);
                     seedTriggerRef.current?.focus();
                   }}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded-md"
+                  className="text-slate-600 hover:text-slate-600 p-1 rounded-md"
                   aria-label="Close dialog"
                 >
                   <X size={16} />
@@ -1135,18 +1150,18 @@ export const ExecutiveAnalyticsPage: React.FC = () => {
 
               <div id="seed-modal-desc" className="space-y-2 text-xs text-slate-600 leading-relaxed">
                 <p>
-                  This utility populates the database with <strong>32 authentic CFPB complaints</strong> spanning all 8 consumer financial product categories across a 14-day operational timestamp range.
+                  This adds a batch of <strong>synthetic financial complaints</strong> to the database. These cases contribute to queue totals and trend charts.
                 </p>
                 <div className="p-3 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 space-y-1">
                   <span className="font-semibold block flex items-center gap-1.5">
                     <Info size={13} className="text-teal-700" />
                     Idempotent Batch Operation
                   </span>
-                  <p className="text-[11px] text-teal-800">
+                  <p className="text-xs text-teal-800">
                     Complaints are seeded with deterministic UUIDs. If the demo batch already exists, existing records will not be duplicated.
                   </p>
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-slate-500">
                   Are you sure you want to proceed with database seeding?
                 </p>
               </div>

@@ -9,7 +9,6 @@ import {
   Cpu,
   Award,
   PieChart as PieIcon,
-  Gauge,
   SlidersHorizontal,
   Download,
   Copy,
@@ -242,6 +241,7 @@ const TEST_LENGTH_BUCKETS = [
 ];
 
 export const ModelAuditPage: React.FC = () => {
+  const [refreshIndex, setRefreshIndex] = useState(0);
   const [auditData, setAuditData] = useState<ModelAuditResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -263,67 +263,72 @@ export const ModelAuditPage: React.FC = () => {
   const [manifestData, setManifestData] = useState<ActiveLearningManifestResponse | null>(null);
   const [manifestLoading, setManifestLoading] = useState(false);
   const [manifestError, setManifestError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportSuccess, setExportSuccess] = useState<{
     format: string;
     sha256: string;
-    recordCount: number;
-    overrideCount: number;
+    recordCount: string | null;
   } | null>(null);
   const [copiedSha, setCopiedSha] = useState(false);
 
   const fetchAuditMetrics = useCallback(async (signal?: AbortSignal) => {
+    setAuditData(null);
     setIsLoading(true);
     setError(null);
     try {
       const data = await getModelAudit(signal);
-      setAuditData(data);
+      if (!signal?.aborted) setAuditData(data);
     } catch (err) {
+      if (signal?.aborted) return;
       if (err instanceof ApiError) {
         setError(err.message || `Failed to fetch model audit analytics (${err.status})`);
       } else if (err instanceof Error && err.name !== 'AbortError') {
         setError(err.message);
       }
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, []);
 
   const fetchCalibration = useCallback(async (signal?: AbortSignal) => {
+    setCalibrationData(null);
+    setHoveredBin(null);
     setCalibrationLoading(true);
     setCalibrationError(null);
     try {
-      if (typeof getCalibrationMetrics === 'function') {
-        const data = await getCalibrationMetrics(signal);
-        setCalibrationData(data);
-      }
+      const data = await getCalibrationMetrics(signal);
+      if (!signal?.aborted) setCalibrationData(data);
     } catch (err) {
+      if (signal?.aborted) return;
       if (err instanceof ApiError) {
         setCalibrationError(err.message || 'Failed to load calibration data');
       } else if (err instanceof Error && err.name !== 'AbortError') {
         setCalibrationError(err.message);
       }
     } finally {
-      setCalibrationLoading(false);
+      if (!signal?.aborted) setCalibrationLoading(false);
     }
   }, []);
 
   const fetchManifest = useCallback(async (overrides: boolean, signal?: AbortSignal) => {
+    setExportSuccess(null);
+    setExportError(null);
+    setManifestData(null);
     setManifestLoading(true);
     setManifestError(null);
     try {
-      if (typeof getActiveLearningManifest === 'function') {
-        const data = await getActiveLearningManifest(overrides, signal);
-        setManifestData(data);
-      }
+      const data = await getActiveLearningManifest(overrides, signal);
+      if (!signal?.aborted) setManifestData(data);
     } catch (err) {
+      if (signal?.aborted) return;
       if (err instanceof ApiError) {
         setManifestError(err.message || 'Failed to load export manifest');
       } else if (err instanceof Error && err.name !== 'AbortError') {
         setManifestError(err.message);
       }
     } finally {
-      setManifestLoading(false);
+      if (!signal?.aborted) setManifestLoading(false);
     }
   }, []);
 
@@ -332,15 +337,17 @@ export const ModelAuditPage: React.FC = () => {
     fetchAuditMetrics(controller.signal);
     fetchCalibration(controller.signal);
     return () => controller.abort();
-  }, [fetchAuditMetrics, fetchCalibration]);
+  }, [fetchAuditMetrics, fetchCalibration, refreshIndex]);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchManifest(onlyOverrides, controller.signal);
     return () => controller.abort();
-  }, [fetchManifest, onlyOverrides]);
+  }, [fetchManifest, onlyOverrides, refreshIndex]);
 
   const handleExportDownload = async (format: 'jsonl' | 'csv') => {
+    setExportError(null);
+    setExportSuccess(null);
     setExportLoading(true);
     try {
       const baseUrl = getApiBaseUrl();
@@ -359,8 +366,7 @@ export const ModelAuditPage: React.FC = () => {
       }
 
       const sha256 = res.headers.get('X-Export-SHA256') || 'Unavailable';
-      const recordCount = parseInt(res.headers.get('X-Export-Record-Count') || '0', 10);
-      const overrideCount = parseInt(res.headers.get('X-Export-Override-Count') || '0', 10);
+      const recordCount = res.headers.get('X-Export-Record-Count');
 
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -377,21 +383,22 @@ export const ModelAuditPage: React.FC = () => {
         format: format.toUpperCase(),
         sha256,
         recordCount,
-        overrideCount,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Export failed';
-      alert(`Export failed: ${msg}`);
+      setExportError(msg);
     } finally {
       setExportLoading(false);
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
       setCopiedSha(true);
       setTimeout(() => setCopiedSha(false), 2000);
+    } catch {
+      setExportError("Could not copy the digest. Select and copy it manually.");
     }
   };
 
@@ -424,10 +431,10 @@ export const ModelAuditPage: React.FC = () => {
   const donutData = useMemo(() => {
     if (!auditData) return null;
     const triggers = [
-      { label: 'Low Confidence (<55%)', count: auditData.triggerBreakdown.LOW_CONFIDENCE || 0, color: '#f59e0b' },
-      { label: 'Narrow Margin (<15%)', count: auditData.triggerBreakdown.SMALL_MARGIN || 0, color: '#fbbf24' },
+      { label: 'Low confidence', count: auditData.triggerBreakdown.LOW_CONFIDENCE || 0, color: '#f59e0b' },
+      { label: 'Narrow margin', count: auditData.triggerBreakdown.SMALL_MARGIN || 0, color: '#fbbf24' },
       { label: 'Critical Policy Flag', count: auditData.triggerBreakdown.CRITICAL_PRIORITY_POLICY || 0, color: '#f43f5e' },
-      { label: 'Straight Auto-Route', count: auditData.triggerBreakdown.AUTO_ROUTED || 0, color: '#14b8a6' },
+      { label: 'Auto-routed', count: auditData.triggerBreakdown.AUTO_ROUTED || 0, color: '#14b8a6' },
     ];
     const total = triggers.reduce((acc, t) => acc + t.count, 0);
 
@@ -443,13 +450,6 @@ export const ModelAuditPage: React.FC = () => {
     });
 
     return { segments, total };
-  }, [auditData]);
-
-  // Semi-circle gauge rotation for Agreement Rate
-  const gaugeNeedleRotation = useMemo(() => {
-    if (!auditData) return -90;
-    const rate = Math.max(0, Math.min(1, auditData.reviewerAgreementRate));
-    return -90 + rate * 180;
   }, [auditData]);
 
   // Reliability diagram SVG coordinates computation
@@ -487,34 +487,24 @@ export const ModelAuditPage: React.FC = () => {
     return { w, h, left, top, plotW, plotH, mapX, mapY, uncalPoints, calPoints, uncalBins, calBins };
   }, [calibrationData]);
 
-  // Helper to find matching calibrated bin
-  const matchingCalBin = useMemo(() => {
-    if (!hoveredBin || !reliabilityDiagramPoints) return null;
-    return reliabilityDiagramPoints.calBins.find((c) => c.bin_index === hoveredBin.bin_index) || null;
-  }, [hoveredBin, reliabilityDiagramPoints]);
-
   return (
     <ReviewerLayout
-      title="AI Audit & Model Benchmark Center"
-      subtitle="Operational agreement calibration, live adjudication matrix, probability calibration, and verified model benchmarks."
-      onRefresh={() => {
-        fetchAuditMetrics();
-        fetchCalibration();
-        fetchManifest(onlyOverrides);
-      }}
+      title="Model audit"
+      subtitle="Compare recorded reviewer decisions, calibration evidence and frozen model benchmarks."
+      onRefresh={() => setRefreshIndex(index => index + 1)}
       isRefreshing={isLoading || calibrationLoading || manifestLoading}
     >
-      <div className="space-y-6 max-w-7xl mx-auto p-2 sm:p-4">
+      <div className="min-w-0 space-y-6">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Model audit</h1>
+          <p className="mt-1 text-sm text-ink-muted">Compare recorded reviewer decisions, calibration evidence and frozen model benchmarks.</p>
+        </header>
         {/* Error Handling */}
         {error && (
           <ErrorState
             title="Unable to Load Audit Analytics"
             message={error}
-            onRetry={() => {
-              fetchAuditMetrics();
-              fetchCalibration();
-              fetchManifest(onlyOverrides);
-            }}
+            onRetry={() => setRefreshIndex(index => index + 1)}
           />
         )}
 
@@ -539,10 +529,10 @@ export const ModelAuditPage: React.FC = () => {
                     <CheckCircle2 size={18} />
                   </div>
                 </div>
-                <p className="text-3xl font-extrabold text-slate-900 mt-2 font-mono tabular-nums">
+                <p className="text-3xl font-semibold text-slate-900 mt-2 font-mono tabular-nums">
                   {auditData.totalAdjudicated}
                 </p>
-                <p className="mt-2 text-[11px] text-slate-400">
+                <p className="mt-2 text-xs text-slate-600">
                   Reviewed cases (Approved or Overridden)
                 </p>
               </div>
@@ -557,11 +547,11 @@ export const ModelAuditPage: React.FC = () => {
                     <TrendingUp size={18} />
                   </div>
                 </div>
-                <p className="text-3xl font-extrabold text-emerald-700 mt-2 font-mono tabular-nums">
-                  {(auditData.reviewerAgreementRate * 100).toFixed(1)}%
+                <p className="text-3xl font-semibold text-emerald-700 mt-2 font-mono tabular-nums">
+                  {auditData.totalAdjudicated ? (auditData.reviewerAgreementRate * 100).toFixed(1) + '%' : 'No reviewed cases'}
                 </p>
-                <p className="mt-2 text-[11px] text-slate-400">
-                  Model prediction accepted without override
+                <p className="mt-2 text-xs text-slate-600">
+                  Predicted and assigned categories match, including priority-only overrides.
                 </p>
               </div>
 
@@ -575,15 +565,10 @@ export const ModelAuditPage: React.FC = () => {
                     <RotateCcw size={18} />
                   </div>
                 </div>
-                <p className="text-3xl font-extrabold text-amber-700 mt-2 font-mono tabular-nums">
-                  {auditData.totalAdjudicated > 0
-                    ? Math.round(
-                        auditData.totalAdjudicated *
-                          (1 - auditData.reviewerAgreementRate)
-                      )
-                    : 0}
+                <p className="text-3xl font-semibold text-amber-700 mt-2 font-mono tabular-nums">
+                  {Object.values(auditData.categoryOverrideDistribution).reduce((sum, count) => sum + count, 0)}
                 </p>
-                <p className="mt-2 text-[11px] text-slate-400">
+                <p className="mt-2 text-xs text-slate-600">
                   Classification or priority re-assigned
                 </p>
               </div>
@@ -598,113 +583,34 @@ export const ModelAuditPage: React.FC = () => {
                     <ShieldAlert size={18} />
                   </div>
                 </div>
-                <p className="text-3xl font-extrabold text-slate-900 mt-2 font-mono tabular-nums">
+                <p className="text-3xl font-semibold text-slate-900 mt-2 font-mono tabular-nums">
                   {(auditData.triggerBreakdown.LOW_CONFIDENCE || 0) +
                     (auditData.triggerBreakdown.SMALL_MARGIN || 0) +
                     (auditData.triggerBreakdown.CRITICAL_PRIORITY_POLICY || 0)}
                 </p>
-                <p className="mt-2 text-[11px] text-slate-400">
+                <p className="mt-2 text-xs text-slate-600">
                   Low confidence, narrow margin, or policy critical
                 </p>
               </div>
             </div>
 
             {/* ─── 2. VISUAL CHARTS: SEMI-CIRCLE GAUGE & DONUT DISTRIBUTION ─── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Visual 1: Reviewer Agreement Semi-Circle Gauge */}
-              <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col items-center justify-between text-center space-y-3">
-                <div className="w-full flex items-center justify-between border-b border-slate-100 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Gauge size={16} className="text-teal-600" />
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Calibration Gauge
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-teal-50 text-teal-700">
-                    Target: &ge; 85%
-                  </span>
-                </div>
-
-                {/* SVG Semi-Circle Speedometer Gauge */}
-                <div className="relative w-48 h-28 my-2">
-                  <svg viewBox="0 0 160 90" className="w-full h-full overflow-visible">
-                    {/* Background Arc */}
-                    <path
-                      d="M 15 80 A 65 65 0 0 1 145 80"
-                      fill="none"
-                      stroke="#e2e8f0"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                    />
-                    {/* Zone 1: Red (<70%) */}
-                    <path
-                      d="M 15 80 A 65 65 0 0 1 54 34"
-                      fill="none"
-                      stroke="#f87171"
-                      strokeWidth="12"
-                    />
-                    {/* Zone 2: Amber (70-85%) */}
-                    <path
-                      d="M 54 34 A 65 65 0 0 1 106 34"
-                      fill="none"
-                      stroke="#fbbf24"
-                      strokeWidth="12"
-                    />
-                    {/* Zone 3: Green (85-100%) */}
-                    <path
-                      d="M 106 34 A 65 65 0 0 1 145 80"
-                      fill="none"
-                      stroke="#14b8a6"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                    />
-
-                    {/* Needle Indicator */}
-                    <g transform={`rotate(${gaugeNeedleRotation}, 80, 80)`}>
-                      <line
-                        x1="80"
-                        y1="80"
-                        x2="80"
-                        y2="24"
-                        stroke="#0f172a"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="80" cy="80" r="5" fill="#0f172a" />
-                    </g>
-                  </svg>
-
-                  {/* Rate display */}
-                  <div className="absolute inset-x-0 bottom-0 text-center flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight tabular-nums leading-none">
-                      {(auditData.reviewerAgreementRate * 100).toFixed(1)}%
-                    </span>
-                    <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mt-1">
-                      Agreement
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-500">
-                  Real-time agreement between top NLP predictions and final reviewer determinations.
-                </p>
-              </div>
-
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Visual 2: Triage Trigger Distribution Donut Chart */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-1.5">
                     <PieIcon size={16} className="text-teal-600" />
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <h2 className="text-base font-semibold text-ink">
                       Review Trigger Distribution
-                    </h3>
+                    </h2>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-500">
-                    {donutData?.total ?? 0} total flags
+                  <span className="text-xs font-mono text-slate-500">
+                    {donutData?.total ?? 0} recorded events
                   </span>
                 </div>
 
-                <div className="flex items-center justify-center gap-4 py-1">
+                <div className="flex flex-wrap items-center justify-center gap-4 py-1">
                   {/* Donut SVG */}
                   <div className="relative w-28 h-28 flex-shrink-0">
                     <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
@@ -725,7 +631,7 @@ export const ModelAuditPage: React.FC = () => {
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                       <span className="text-xs font-bold font-mono text-slate-800">
-                        {donutData?.total ?? 0} Flags
+                        {donutData?.total ?? 0} events
                       </span>
                     </div>
                   </div>
@@ -736,16 +642,16 @@ export const ModelAuditPage: React.FC = () => {
                       <div key={idx} className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: seg.color }} />
-                          <span className="text-slate-600 truncate text-[11px]">{seg.label}</span>
+                          <span className="text-slate-600 truncate text-xs">{seg.label}</span>
                         </div>
-                        <span className="font-mono font-bold text-slate-900 text-[11px] ml-2">{seg.count}</span>
+                        <span className="font-mono font-bold text-slate-900 text-xs ml-2">{seg.count}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-2">
-                  Cases with confidence &ge; 55% and margin &ge; 15% are routed automatically.
+                <p className="text-xs text-slate-600 border-t border-slate-100 pt-2">
+                  A prediction may contribute to more than one review trigger. Routing follows the recorded review flag.
                 </p>
               </div>
 
@@ -756,35 +662,35 @@ export const ModelAuditPage: React.FC = () => {
                     <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
                       <Info size={16} />
                     </div>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <h2 className="text-base font-semibold text-ink">
                       Model Governance &amp; Truthful AI
-                    </h3>
+                    </h2>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed">
                     CivicResolve AI classification scores represent <strong>uncalibrated model probability estimates</strong> produced by a TF-IDF multi-class logistic regression classifier. Model predictions provide preliminary algorithmic triage assistance and do not constitute legal determinations or binding case adjudications.
                   </p>
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 font-mono flex items-center justify-between">
-                  <span>Artifact: SHA-256 Verified</span>
-                  <span className="text-emerald-700 font-bold">&bull; Baseline TF-IDF Active</span>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 font-mono flex items-center justify-between">
+                  <span>Source: saved predictions</span>
+                  <span className="text-emerald-700 font-bold">TF-IDF baseline</span>
                 </div>
               </div>
             </div>
 
             {/* ─── 3. 8x8 ADJUDICATION HEATMAP MATRIX ───────────────────────── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
                     <Scale size={16} />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <h2 className="text-base font-semibold text-ink">
                       8&times;8 Model Prediction vs Human Adjudication Matrix
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Rows = Model Predicted Category &bull; Columns = Human Reviewer Assigned Category &bull; Hover over any cell for case ratio.
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Rows = Model Predicted Category &bull; Columns = Human Reviewer Assigned Category &bull; A cell gives the number of cases with that pair of categories.
                     </p>
                   </div>
                 </div>
@@ -798,28 +704,28 @@ export const ModelAuditPage: React.FC = () => {
               {hoveredCell && (
                 <div className="p-3 rounded-xl bg-slate-900 text-white text-xs flex flex-wrap items-center justify-between gap-2 animate-in fade-in">
                   <div>
-                    <span className="text-slate-400 font-mono">Predicted: </span>
+                    <span className="text-slate-300 font-mono">Predicted: </span>
                     <span className="font-semibold text-teal-300">{hoveredCell.row}</span>
-                    <span className="text-slate-400 mx-2">&rarr;</span>
-                    <span className="text-slate-400 font-mono">Adjudicated: </span>
+                    <span className="text-slate-300 mx-2">&rarr;</span>
+                    <span className="text-slate-300 font-mono">Adjudicated: </span>
                     <span className="font-semibold text-amber-300">{hoveredCell.col}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-white font-mono">{hoveredCell.count} cases</span>
-                    <span className="text-slate-400 text-[11px]">
+                    <span className="text-slate-300 text-xs">
                       ({hoveredCell.rowTotal > 0 ? Math.round((hoveredCell.count / hoveredCell.rowTotal) * 100) : 0}% of row)
                     </span>
                   </div>
                 </div>
               )}
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse">
+              <div className="overflow-x-auto" role="region" aria-label="Predicted and assigned category counts" tabIndex={0}>
+                <table aria-label="Predicted and assigned category counts" className="w-full text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                    <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
                       <th className="p-2 text-left font-bold w-48">Model \ Human</th>
                       {APPROVED_CATEGORIES.map((cat, idx) => (
-                        <th key={cat} className="p-2 text-center font-bold" title={cat}>
+                        <th key={cat} scope="col" aria-label={cat} className="p-2 text-center font-bold" title={cat}>
                           C{idx + 1}
                         </th>
                       ))}
@@ -832,31 +738,31 @@ export const ModelAuditPage: React.FC = () => {
 
                       return (
                         <tr key={rowCat} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="p-2 text-left font-sans font-medium text-slate-800 truncate max-w-[220px]" title={rowCat}>
-                            <span className="text-[10px] text-slate-400 font-mono mr-1">
+                          <th scope="row" className="p-2 text-left font-sans font-medium text-slate-800 truncate max-w-[220px]" title={rowCat}>
+                            <span className="text-xs text-slate-600 font-mono mr-1">
                               C{rowIdx + 1}
                             </span>
                             {rowCat}
-                          </td>
+                          </th>
                           {APPROVED_CATEGORIES.map((colCat) => {
                             const count = rowData[colCat] || 0;
                             const isDiagonal = rowCat === colCat;
 
                             // Color scale intensity
-                            let cellBg = 'bg-transparent text-slate-300';
+                            let cellBg = 'bg-transparent text-slate-600';
                             if (isDiagonal && count > 0) {
                               const ratio = count / matrixStats.maxDiagonal;
                               if (ratio > 0.6) {
-                                cellBg = 'bg-teal-600 text-white font-bold';
+                                cellBg = 'bg-teal-700 text-white font-bold';
                               } else if (ratio > 0.3) {
-                                cellBg = 'bg-teal-500/80 text-white font-bold';
+                                cellBg = 'bg-teal-100 text-teal-900 font-bold';
                               } else {
                                 cellBg = 'bg-teal-100 text-teal-900 font-bold';
                               }
                             } else if (!isDiagonal && count > 0) {
                               const ratio = count / matrixStats.maxOffDiag;
                               if (ratio > 0.5) {
-                                cellBg = 'bg-amber-600 text-white font-bold';
+                                cellBg = 'bg-amber-800 text-white font-bold';
                               } else {
                                 cellBg = 'bg-amber-100 text-amber-900 font-bold';
                               }
@@ -869,7 +775,8 @@ export const ModelAuditPage: React.FC = () => {
                                 onMouseLeave={() => setHoveredCell(null)}
                                 className={`p-2 text-center tabular-nums cursor-pointer transition-all ${cellBg}`}
                               >
-                                {count}
+                                <span>{count}</span>
+                                {rowTotal > 0 && <span className="sr-only">, {Math.round(count / rowTotal * 100)}% of this predicted category</span>}
                               </td>
                             );
                           })}
@@ -880,38 +787,38 @@ export const ModelAuditPage: React.FC = () => {
                 </table>
               </div>
 
-              <div className="text-[11px] text-slate-400 flex flex-wrap gap-4 pt-2 border-t border-slate-100 font-mono">
+              <div className="text-xs text-slate-600 flex flex-wrap gap-4 pt-2 border-t border-slate-100 font-mono">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded bg-teal-500 inline-block" />
-                  Diagonal = Reviewer Confirmed (Model Agreed)
+                  Diagonal = same category
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block" />
-                  Off-Diagonal = Reviewer Overridden (Human Calibration)
+                  Off-diagonal = category changed
                 </span>
               </div>
             </div>
 
             {/* ─── 4. PROBABILITY CALIBRATION INSPECTOR ─────────────────────── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
                     <SlidersHorizontal size={18} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                    <h2 className="text-base font-semibold text-ink">
                       Probability Calibration Inspector &amp; Reliability Diagram
-                    </h3>
+                    </h2>
                     <p className="text-xs text-slate-500">
-                      Post-hoc Temperature Scaling analysis on 50/50 stratified validation split (n = 6,363 fit / n = 6,363 eval) &bull; Held-out test set sealed.
+                      {calibrationData ? `Validation split · n = ${calibrationData.calibration_fit_rows.toLocaleString()} fit / n = ${calibrationData.calibration_eval_rows.toLocaleString()} eval` : "Validation-set measurements from the NLP service."}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-teal-50 text-teal-800 border border-teal-200">
-                    Optimal T = {calibrationData?.optimal_temperature ? calibrationData.optimal_temperature.toFixed(4) : '0.7866'}
+                    {calibrationData ? `Optimal T = ${calibrationData.optimal_temperature.toFixed(4)}` : calibrationLoading ? 'Loading calibration' : 'Calibration unavailable'}
                   </span>
                 </div>
               </div>
@@ -923,76 +830,77 @@ export const ModelAuditPage: React.FC = () => {
                 </div>
               )}
 
+              {calibrationData && <>
               {/* Metric Stat Callouts */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Metric 1: Temperature */}
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                     Temperature Scale (T)
                   </span>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-extrabold text-teal-800 font-mono">
-                      {calibrationData?.optimal_temperature ? calibrationData.optimal_temperature.toFixed(4) : '0.7866'}
+                    <span className="text-2xl font-semibold text-teal-800 font-mono">
+                      {calibrationData.optimal_temperature.toFixed(4)}
                     </span>
-                    <span className="text-[10px] text-teal-600 font-semibold font-mono">
+                    <span className="text-xs text-teal-700 font-semibold font-mono">
                       (NLL Minimized)
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    T &lt; 1.0 dampens logits, reducing overconfidence.
+                  <p className="text-xs text-slate-600 mt-1">
+                    Temperatures below one sharpen the probability distribution.
                   </p>
                 </div>
 
                 {/* Metric 2: ECE */}
                 <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200">
-                  <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block">
+                  <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
                     Expected Calibration Error
                   </span>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-extrabold text-emerald-700 font-mono">
-                      {calibrationData ? (calibrationData.calibrated_ece * 100).toFixed(2) : '3.06'}%
+                    <span className="text-2xl font-semibold text-emerald-700 font-mono">
+                      {(calibrationData.calibrated_ece * 100).toFixed(2)}%
                     </span>
-                    <span className="text-xs text-slate-400 font-mono line-through">
-                      {calibrationData ? (calibrationData.uncalibrated_ece * 100).toFixed(2) : '6.09'}%
+                    <span className="text-xs text-slate-600 font-mono line-through">
+                      {(calibrationData.uncalibrated_ece * 100).toFixed(2)}%
                     </span>
                   </div>
-                  <p className="text-[11px] text-emerald-700 font-semibold mt-1">
-                    -{calibrationData ? calibrationData.ece_reduction_percent.toFixed(1) : '49.8'}% relative reduction
+                  <p className="text-xs text-emerald-700 font-semibold mt-1">
+                    {calibrationData.ece_reduction_percent.toFixed(1)}% relative reduction
                   </p>
                 </div>
 
                 {/* Metric 3: Brier Score */}
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                     Multi-Class Brier Score
                   </span>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-extrabold text-slate-800 font-mono">
-                      {calibrationData ? calibrationData.calibrated_brier.toFixed(4) : '0.2512'}
+                    <span className="text-2xl font-semibold text-slate-800 font-mono">
+                      {calibrationData.calibrated_brier.toFixed(4)}
                     </span>
-                    <span className="text-xs text-slate-400 font-mono line-through">
-                      {calibrationData ? calibrationData.uncalibrated_brier.toFixed(4) : '0.2590'}
+                    <span className="text-xs text-slate-600 font-mono line-through">
+                      {calibrationData.uncalibrated_brier.toFixed(4)}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
+                  <p className="text-xs text-slate-600 mt-1">
                     Mean squared error of multi-class probabilities.
                   </p>
                 </div>
 
                 {/* Metric 4: Max Calibration Error */}
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                     Max Calibration Error (MCE)
                   </span>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-extrabold text-slate-800 font-mono">
-                      {calibrationData ? (calibrationData.calibrated_mce * 100).toFixed(2) : '5.42'}%
+                    <span className="text-2xl font-semibold text-slate-800 font-mono">
+                      {(calibrationData.calibrated_mce * 100).toFixed(2)}%
                     </span>
-                    <span className="text-xs text-slate-400 font-mono line-through">
-                      {calibrationData ? (calibrationData.uncalibrated_mce * 100).toFixed(2) : '12.87'}%
+                    <span className="text-xs text-slate-600 font-mono line-through">
+                      {(calibrationData.uncalibrated_mce * 100).toFixed(2)}%
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
+                  <p className="text-xs text-slate-600 mt-1">
                     Worst-case single-bin divergence.
                   </p>
                 </div>
@@ -1012,13 +920,13 @@ export const ModelAuditPage: React.FC = () => {
                           <g key={v}>
                             {/* Horizontal grid line */}
                             <line x1="50" y1={y} x2="435" y2={y} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 3" />
-                            <text x="44" y={y + 3} textAnchor="end" className="text-[9px] fill-slate-400 font-mono">
+                            <text x="44" y={y + 3} textAnchor="end" className="text-[9px] fill-slate-600 font-mono">
                               {(v * 100).toFixed(0)}%
                             </text>
 
                             {/* Vertical grid line */}
                             <line x1={x} y1="20" x2={x} y2="260" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 3" />
-                            <text x={x} y="275" textAnchor="middle" className="text-[9px] fill-slate-400 font-mono">
+                            <text x={x} y="275" textAnchor="middle" className="text-[9px] fill-slate-600 font-mono">
                               {(v * 100).toFixed(0)}%
                             </text>
                           </g>
@@ -1057,6 +965,11 @@ export const ModelAuditPage: React.FC = () => {
                               stroke="#ffffff"
                               strokeWidth="1.5"
                               className="cursor-pointer transition-all"
+                              tabIndex={0}
+                              role="img"
+                              aria-label={`Uncalibrated bin ${p.bin.bin_index + 1}, ${p.bin.sample_count} samples`}
+                              onFocus={() => setHoveredBin(p.bin)}
+                              onBlur={() => setHoveredBin(null)}
                               onMouseEnter={() => setHoveredBin(p.bin)}
                               onMouseLeave={() => setHoveredBin(null)}
                             />
@@ -1073,6 +986,11 @@ export const ModelAuditPage: React.FC = () => {
                               stroke="#ffffff"
                               strokeWidth="1.5"
                               className="cursor-pointer transition-all"
+                              tabIndex={0}
+                              role="img"
+                              aria-label={`Calibrated bin ${p.bin.bin_index + 1}, ${p.bin.sample_count} samples`}
+                              onFocus={() => setHoveredBin(p.bin)}
+                              onBlur={() => setHoveredBin(null)}
                               onMouseEnter={() => setHoveredBin(p.bin)}
                               onMouseLeave={() => setHoveredBin(null)}
                             />
@@ -1081,38 +999,38 @@ export const ModelAuditPage: React.FC = () => {
                       )}
 
                       {/* Axis Titles */}
-                      <text x="242" y="295" textAnchor="middle" className="text-[10px] fill-slate-600 font-sans font-semibold">
-                        Mean Predicted Confidence &rarr;
+                      <text x="242" y="295" textAnchor="middle" className="text-xs fill-slate-600 font-sans font-semibold">
+                        Mean predicted confidence
                       </text>
-                      <text x="16" y="140" textAnchor="middle" transform="rotate(-90 16 140)" className="text-[10px] fill-slate-600 font-sans font-semibold">
-                        Empirical Accuracy &rarr;
+                      <text x="16" y="140" textAnchor="middle" transform="rotate(-90 16 140)" className="text-xs fill-slate-600 font-sans font-semibold">
+                        Observed accuracy
                       </text>
                     </svg>
                   </div>
 
                   {/* Diagram Legend */}
-                  <div className="flex items-center gap-6 mt-3 text-xs font-mono">
+                  <div className="flex flex-wrap items-center gap-3 mt-3 text-xs">
                     <span className="flex items-center gap-1.5">
                       <span className="w-3 h-0.5 bg-slate-400 border-b border-dashed border-slate-400 inline-block" />
                       Ideal Calibration (y = x)
                     </span>
                     <span className="flex items-center gap-1.5 text-amber-700">
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-                      Uncalibrated (ECE: 6.09%)
+                      Uncalibrated (ECE: {(calibrationData.uncalibrated_ece * 100).toFixed(2)}%)
                     </span>
                     <span className="flex items-center gap-1.5 text-teal-800">
                       <span className="w-2.5 h-2.5 rounded-full bg-teal-600 inline-block" />
-                      Calibrated T=0.7866 (ECE: 3.06%)
+                      Calibrated T={calibrationData.optimal_temperature.toFixed(4)} (ECE: {(calibrationData.calibrated_ece * 100).toFixed(2)}%)
                     </span>
                   </div>
                 </div>
 
                 {/* Bin Inspector Panel */}
                 <div className="lg:col-span-5 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                     <Activity size={14} className="text-teal-600" />
                     Interactive Bin Inspector
-                  </h4>
+                  </h3>
 
                   {hoveredBin ? (
                     <div className="p-4 rounded-xl bg-slate-900 text-white space-y-3 animate-in fade-in text-xs">
@@ -1120,75 +1038,60 @@ export const ModelAuditPage: React.FC = () => {
                         <span className="font-mono text-teal-300 font-bold">
                           Bin #{hoveredBin.bin_index + 1} [{hoveredBin.bin_lower.toFixed(2)} &ndash; {hoveredBin.bin_upper.toFixed(2)}]
                         </span>
-                        <span className="font-mono text-slate-400">
+                        <span className="font-mono text-slate-300">
                           {hoveredBin.sample_count.toLocaleString()} samples
                         </span>
                       </div>
 
-                      <div className="space-y-2 font-mono text-[11px]">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Uncalibrated Mean Conf:</span>
-                          <span className="font-bold text-amber-400">{(hoveredBin.mean_confidence * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Uncalibrated Empirical Acc:</span>
-                          <span className="font-bold text-amber-400">{(hoveredBin.empirical_accuracy * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="flex items-center justify-between border-t border-slate-800 pt-1">
-                          <span className="text-slate-400">Calibrated Mean Conf:</span>
-                          <span className="font-bold text-teal-400">
-                            {matchingCalBin ? `${(matchingCalBin.mean_confidence * 100).toFixed(1)}%` : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Calibrated Empirical Acc:</span>
-                          <span className="font-bold text-teal-400">
-                            {matchingCalBin ? `${(matchingCalBin.empirical_accuracy * 100).toFixed(1)}%` : 'N/A'}
-                          </span>
-                        </div>
-                      </div>
+                      <dl className="space-y-2">
+                        <dt>Mean predicted confidence</dt>
+                        <dd>{(hoveredBin.mean_confidence * 100).toFixed(1)}%</dd>
+                        <dt>Observed accuracy</dt>
+                        <dd>{(hoveredBin.empirical_accuracy * 100).toFixed(1)}%</dd>
+                      </dl>
                     </div>
                   ) : (
                     <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 space-y-2">
                       <p className="font-medium text-slate-700">
-                        Hover over any curve node in the reliability diagram to inspect specific bin sample counts, mean confidence, and empirical accuracy.
+                        Focus or point to a curve marker to inspect its bin.
                       </p>
-                      <p className="text-[11px] text-slate-400">
-                        Notice how the calibrated curve (teal) sits closer to the ideal diagonal line, demonstrating reduced overconfidence and higher reliability for compliance reviews.
+                      <p className="text-xs text-slate-600">
+                        Points closer to the diagonal indicate closer agreement between confidence and observed accuracy for that bin.
                       </p>
                     </div>
                   )}
 
-                  <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-200/80 text-[11px] text-teal-900 space-y-1">
+                  <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-200/80 text-xs text-teal-900 space-y-1">
                     <span className="font-bold block">Academic Integrity Protocol:</span>
                     <span>
-                      Calibration parameters were fit strictly on 50% of the validation split (n = 6,363) and evaluated on the other 50% (n = 6,363). The held-out test split (n = 12,727) remains completely sealed.
+                      {calibrationData.evaluation_dataset}. Calibration uses the validation split. Held-out test benchmarks appear separately below.
                     </span>
                   </div>
                 </div>
               </div>
+              </>}
             </div>
 
             {/* ─── 5. FINAL HELD-OUT TEST BENCHMARK WITH COMPARATIVE BARS ──── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
                     <Award size={16} />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    <h2 className="text-base font-semibold text-ink">
                       Final Held-Out Test Benchmark: TF-IDF vs. PyTorch Bi-LSTM
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Evaluated on 12,727 sealed CFPB held-out test complaints &bull; Protocol: Single authorized evaluation for academic submission.
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Published results from the held-out CFPB test split. These values describe the evaluated checkpoints.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                    Source: Frozen Evaluation Artifact baseline_eval_test.json &amp; bilstm_eval_test.json &bull; Sealed Test Split n = 12,727
+                    Frozen evaluation artifacts: baseline_eval_test.json and bilstm_eval_test.json · 12,727 test examples
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
                     Active: Baseline TF-IDF (0.7488 Test Macro-F1)
@@ -1202,52 +1105,52 @@ export const ModelAuditPage: React.FC = () => {
               {/* Aggregate Metric Comparison Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">
                     Macro-Averaged F1 (Test)
                   </div>
                   <div className="flex items-baseline justify-between font-mono">
-                    <span className="text-base font-extrabold text-teal-800">
-                      0.7488 <span className="text-[10px] font-normal text-slate-500">(TF-IDF)</span>
+                    <span className="text-base font-semibold text-teal-800">
+                      0.7488 <span className="text-xs font-normal text-slate-500">(TF-IDF)</span>
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      0.7034 <span className="text-[10px] font-normal">(Bi-LSTM)</span>
+                      0.7034 <span className="text-xs font-normal">(Bi-LSTM)</span>
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                  <div className="mt-1 text-xs text-emerald-700 font-semibold">
                     +0.0453 Baseline Advantage
                   </div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">
                     Overall Accuracy (Test)
                   </div>
                   <div className="flex items-baseline justify-between font-mono">
-                    <span className="text-base font-extrabold text-teal-800">
-                      84.10% <span className="text-[10px] font-normal text-slate-500">(TF-IDF)</span>
+                    <span className="text-base font-semibold text-teal-800">
+                      84.10% <span className="text-xs font-normal text-slate-500">(TF-IDF)</span>
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      81.24% <span className="text-[10px] font-normal">(Bi-LSTM)</span>
+                      81.24% <span className="text-xs font-normal">(Bi-LSTM)</span>
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                  <div className="mt-1 text-xs text-emerald-700 font-semibold">
                     +2.86% Baseline Advantage
                   </div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">
                     Weighted-Averaged F1 (Test)
                   </div>
                   <div className="flex items-baseline justify-between font-mono">
-                    <span className="text-base font-extrabold text-teal-800">
-                      0.8481 <span className="text-[10px] font-normal text-slate-500">(TF-IDF)</span>
+                    <span className="text-base font-semibold text-teal-800">
+                      0.8481 <span className="text-xs font-normal text-slate-500">(TF-IDF)</span>
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      0.8232 <span className="text-[10px] font-normal">(Bi-LSTM)</span>
+                      0.8232 <span className="text-xs font-normal">(Bi-LSTM)</span>
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                  <div className="mt-1 text-xs text-emerald-700 font-semibold">
                     +0.0249 Baseline Advantage
                   </div>
                 </div>
@@ -1257,7 +1160,7 @@ export const ModelAuditPage: React.FC = () => {
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
                   <span>Class-Level F1 Comparative Performance</span>
-                  <div className="flex items-center gap-4 text-[11px]">
+                  <div className="flex items-center gap-4 text-xs">
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-teal-600 inline-block" /> Baseline TF-IDF</span>
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-slate-400 inline-block" /> Bi-LSTM Challenger</span>
                   </div>
@@ -1271,7 +1174,7 @@ export const ModelAuditPage: React.FC = () => {
                     <div key={bench.category} className="p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/60 space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-slate-800 truncate max-w-sm">{bench.category}</span>
-                        <span className="text-[10px] text-emerald-700 font-mono font-bold">
+                        <span className="text-xs text-emerald-700 font-mono font-bold">
                           +{bench.delta.toFixed(4)} F1 Advantage (n={bench.support.toLocaleString()})
                         </span>
                       </div>
@@ -1279,22 +1182,22 @@ export const ModelAuditPage: React.FC = () => {
                       <div className="space-y-1">
                         {/* Baseline Bar */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-slate-500 w-16">TF-IDF</span>
+                          <span className="text-xs font-mono text-slate-500 w-16">TF-IDF</span>
                           <div className="flex-1 h-2 rounded-full bg-slate-200 overflow-hidden">
                             <div style={{ width: `${baseW}%` }} className="h-full bg-teal-600 rounded-full" />
                           </div>
-                          <span className="text-[10px] font-mono font-bold text-teal-800 w-12 text-right">
+                          <span className="text-xs font-mono font-bold text-teal-800 w-12 text-right">
                             {bench.baselineF1.toFixed(4)}
                           </span>
                         </div>
 
                         {/* Bi-LSTM Bar */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-slate-500 w-16">Bi-LSTM</span>
+                          <span className="text-xs font-mono text-slate-500 w-16">Bi-LSTM</span>
                           <div className="flex-1 h-2 rounded-full bg-slate-200 overflow-hidden">
                             <div style={{ width: `${bilstmW}%` }} className="h-full bg-slate-400 rounded-full" />
                           </div>
-                          <span className="text-[10px] font-mono text-slate-600 w-12 text-right">
+                          <span className="text-xs font-mono text-slate-600 w-12 text-right">
                             {bench.bilstmF1.toFixed(4)}
                           </span>
                         </div>
@@ -1306,13 +1209,13 @@ export const ModelAuditPage: React.FC = () => {
 
               {/* Narrative Word Length Buckets Table */}
               <div className="pt-2">
-                <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Test Accuracy by Complaint Narrative Length
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" role="region" aria-label="Narrative length bucket comparison" tabIndex={0}>
                   <table className="w-full text-xs text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                      <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
                         <th className="py-2 px-3 font-bold">Word Length Bucket</th>
                         <th className="py-2 px-3 font-bold text-right">Support (n)</th>
                         <th className="py-2 px-3 font-bold text-right">Share (%)</th>
@@ -1351,23 +1254,23 @@ export const ModelAuditPage: React.FC = () => {
             </div>
 
             {/* ─── 6. VERIFIED OFFLINE VALIDATION BENCHMARK ─────────────────── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center">
                     <Cpu size={16} />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Verified Validation Benchmark: TF-IDF vs. PyTorch Bi-LSTM
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Evaluated on 12,726 deduplicated CFPB validation complaints &bull; Test set strictly sealed.
+                    <h2 className="text-base font-semibold text-ink">
+                      Validation benchmark: TF-IDF vs. PyTorch Bi-LSTM
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Evaluated on 12,726 deduplicated CFPB validation complaints &bull; Frozen validation benchmark.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-[10px] font-mono">
+                <div className="flex items-center gap-2 text-xs font-mono">
                   <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
                     Active: Baseline TF-IDF (0.7453 Macro-F1)
                   </span>
@@ -1380,62 +1283,62 @@ export const ModelAuditPage: React.FC = () => {
               {/* Aggregate Metric Comparison Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">
                     Macro-Averaged F1
                   </div>
                   <div className="flex items-baseline justify-between font-mono">
-                    <span className="text-base font-extrabold text-teal-800">
-                      0.7453 <span className="text-[10px] font-normal text-slate-500">(TF-IDF)</span>
+                    <span className="text-base font-semibold text-teal-800">
+                      0.7453 <span className="text-xs font-normal text-slate-500">(TF-IDF)</span>
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      0.7067 <span className="text-[10px] font-normal">(Bi-LSTM)</span>
+                      0.7067 <span className="text-xs font-normal">(Bi-LSTM)</span>
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                  <div className="mt-1 text-xs text-emerald-700 font-semibold">
                     +0.0386 Baseline Advantage
                   </div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">
                     Overall Accuracy
                   </div>
                   <div className="flex items-baseline justify-between font-mono">
-                    <span className="text-base font-extrabold text-teal-800">
-                      83.80% <span className="text-[10px] font-normal text-slate-500">(TF-IDF)</span>
+                    <span className="text-base font-semibold text-teal-800">
+                      83.80% <span className="text-xs font-normal text-slate-500">(TF-IDF)</span>
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      81.24% <span className="text-[10px] font-normal">(Bi-LSTM)</span>
+                      81.24% <span className="text-xs font-normal">(Bi-LSTM)</span>
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                  <div className="mt-1 text-xs text-emerald-700 font-semibold">
                     +2.56% Baseline Advantage
                   </div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">
                     Weighted-Averaged F1
                   </div>
                   <div className="flex items-baseline justify-between font-mono">
-                    <span className="text-base font-extrabold text-teal-800">
-                      0.8455 <span className="text-[10px] font-normal text-slate-500">(TF-IDF)</span>
+                    <span className="text-base font-semibold text-teal-800">
+                      0.8455 <span className="text-xs font-normal text-slate-500">(TF-IDF)</span>
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      0.8230 <span className="text-[10px] font-normal">(Bi-LSTM)</span>
+                      0.8230 <span className="text-xs font-normal">(Bi-LSTM)</span>
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                  <div className="mt-1 text-xs text-emerald-700 font-semibold">
                     +0.0225 Baseline Advantage
                   </div>
                 </div>
               </div>
 
               {/* Per-Class Table */}
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" role="region" aria-label="Per-category model comparison" tabIndex={0}>
                 <table className="w-full text-xs text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                    <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
                       <th className="py-2 px-3 font-bold">Category</th>
                       <th className="py-2 px-3 font-bold text-center">Baseline F1</th>
                       <th className="py-2 px-3 font-bold text-center">Bi-LSTM F1</th>
@@ -1469,25 +1372,25 @@ export const ModelAuditPage: React.FC = () => {
             </div>
 
             {/* ─── 7. ACTIVE LEARNING & RETRAINING FLYWHEEL ────────────────── */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
                     <Database size={18} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                      Active Learning &amp; Distillation Flywheel (MLOps)
-                    </h3>
+                    <h2 className="text-base font-semibold text-ink">
+                      Reviewed case export
+                    </h2>
                     <p className="text-xs text-slate-500">
-                      Curate verified human-adjudicated complaints with cryptographic SHA-256 tamper-evident packaging for model retraining and fine-tuning.
+                      Download approved and overridden cases with masked narratives and a server-reported digest.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                    Flyway V6 Schema Intact
+                    Reviewer export
                   </span>
                 </div>
               </div>
@@ -1502,37 +1405,37 @@ export const ModelAuditPage: React.FC = () => {
               {/* Manifest Stats & Controls */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                     Eligible Curated Records
                   </span>
-                  <p className="text-2xl font-extrabold text-slate-900 font-mono mt-1">
-                    {manifestData?.recordCount ?? 0}
+                  <p className="text-2xl font-semibold text-slate-900 font-mono mt-1">
+                    {manifestData?.recordCount ?? '—'}
                   </p>
-                  <p className="text-[11px] text-slate-400 mt-1">
+                  <p className="text-xs text-slate-600 mt-1">
                     Adjudicated complaints (Approved or Overridden)
                   </p>
                 </div>
 
                 <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200">
-                  <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider block">
-                    Human Overrides (Hard Negatives)
+                  <span className="text-xs font-semibold text-amber-800 uppercase tracking-wider block">
+                    Reviewer overrides
                   </span>
-                  <p className="text-2xl font-extrabold text-amber-700 font-mono mt-1">
-                    {manifestData?.overrideCount ?? 0}
+                  <p className="text-2xl font-semibold text-amber-700 font-mono mt-1">
+                    {manifestData?.overrideCount ?? '—'}
                   </p>
-                  <p className="text-[11px] text-amber-700 font-medium mt-1">
-                    Critical feedback signals for active learning
+                  <p className="text-xs text-amber-700 font-medium mt-1">
+                    Includes changes to category or priority
                   </p>
                 </div>
 
                 <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200">
-                  <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block">
-                    Model Approvals (Consistent Positives)
+                  <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
+                    Reviewer approvals
                   </span>
-                  <p className="text-2xl font-extrabold text-emerald-700 font-mono mt-1">
-                    {manifestData ? manifestData.recordCount - manifestData.overrideCount : 0}
+                  <p className="text-2xl font-semibold text-emerald-700 font-mono mt-1">
+                    {manifestData?.approvalCount ?? '—'}
                   </p>
-                  <p className="text-[11px] text-emerald-700 font-medium mt-1">
+                  <p className="text-xs text-emerald-700 font-medium mt-1">
                     Human-validated baseline predictions
                   </p>
                 </div>
@@ -1549,13 +1452,13 @@ export const ModelAuditPage: React.FC = () => {
                       className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-xs font-semibold text-slate-700">
-                      Filter to Overrides Only (Export hard misclassifications where human reviewer corrected the model)
+                      Filter to overrides only
                     </span>
                   </label>
 
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
                     <ShieldCheck size={14} className="text-emerald-600" />
-                    <span>Server-Side PII Scrubbing Active</span>
+                    <span>Pattern-based masking</span>
                   </div>
                 </div>
 
@@ -1563,16 +1466,16 @@ export const ModelAuditPage: React.FC = () => {
                 <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 text-xs font-mono">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="flex items-center gap-2 truncate">
-                      <span className="text-slate-400">SHA-256 Manifest:</span>
+                      <span className="text-slate-600">SHA-256 Manifest:</span>
                       <span className="font-bold text-slate-800 truncate max-w-md" title={manifestData?.sha256Digest}>
-                        {manifestData?.sha256Digest || 'Computing...'}
+                        {manifestData?.sha256Digest || (manifestLoading ? 'Loading…' : 'Unavailable')}
                       </span>
                     </div>
 
                     {manifestData?.sha256Digest && (
                       <button
                         onClick={() => copyToClipboard(manifestData.sha256Digest)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] transition-colors"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition-colors"
                       >
                         {copiedSha ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
                         <span>{copiedSha ? 'Copied' : 'Copy Hash'}</span>
@@ -1580,33 +1483,33 @@ export const ModelAuditPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-500 pt-2 border-t border-slate-100">
                     <div>
-                      <span className="text-slate-400">Timestamp: </span>
+                      <span className="text-slate-600">Timestamp: </span>
                       <span>{manifestData ? new Date(manifestData.exportedAt).toLocaleTimeString() : '...'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400">Sign-Off Actor: </span>
-                      <span className="text-teal-700 font-bold">{manifestData?.exportedBy || 'ROLE_REVIEWER'}</span>
+                      <span className="text-slate-600">Sign-Off Actor: </span>
+                      <span className="text-teal-700 font-bold">{manifestData?.exportedBy || 'Unavailable'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400">Audit Storage: </span>
-                      <span className="text-emerald-700 font-bold">Immutable Manifest (Zero Null Violations)</span>
+                      <span className="text-slate-600">Included records: </span>
+                      <span className="text-emerald-700 font-bold">Approved and overridden cases</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Export Action Buttons */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                  <div className="text-[11px] text-slate-500 max-w-lg">
+                  <div className="text-xs text-slate-500 max-w-lg">
                     Exports stream directly with cryptographic validation headers (<code className="bg-slate-200/60 px-1 py-0.5 rounded text-slate-700">X-Export-SHA256</code>) and regex PII masking.
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => handleExportDownload('jsonl')}
                       disabled={exportLoading || !manifestData || manifestData.recordCount === 0}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors"
                     >
                       <Download size={14} />
                       <span>{exportLoading ? 'Streaming...' : 'Export Curated JSONL'}</span>
@@ -1623,18 +1526,19 @@ export const ModelAuditPage: React.FC = () => {
                   </div>
                 </div>
 
+                {exportError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{exportError}</p>}
                 {/* Export Success Banner */}
                 {exportSuccess && (
                   <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between gap-2 animate-in fade-in">
                     <div className="flex items-center gap-2">
                       <CheckCircle size={16} className="text-emerald-600 flex-shrink-0" />
                       <span>
-                        Successfully exported <strong>{exportSuccess.recordCount}</strong> curated records ({exportSuccess.format}). SHA-256 verified: <code className="font-mono font-bold">{exportSuccess.sha256.slice(0, 16)}...</code>
+                        Downloaded {exportSuccess.format}{exportSuccess.recordCount !== null && <> · {exportSuccess.recordCount} records</>}. Reported digest: <code className="break-all font-mono">{exportSuccess.sha256}</code>
                       </span>
                     </div>
                     <button
                       onClick={() => setExportSuccess(null)}
-                      className="text-emerald-600 hover:text-emerald-800 text-[11px] font-bold"
+                      className="text-emerald-600 hover:text-emerald-800 text-xs font-bold"
                     >
                       Dismiss
                     </button>
