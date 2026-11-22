@@ -69,10 +69,10 @@ All documented evaluation metrics are computed on the fixed validation split (`n
 | Debt collection | 0.6737 | 0.8302 | 0.7438 | 1,649 |
 | Credit card | 0.6452 | 0.7909 | 0.7107 | 837 |
 | Checking or savings account | 0.7477 | 0.7943 | 0.7703 | 836 |
-| Money transfer, virtual currency, or money service | 0.6698 | 0.7983 | 0.7285 | 357 |
-| Mortgage | 0.7788 | 0.8711 | 0.8224 | 450 |
-| Student loan | 0.7006 | 0.8143 | 0.7532 | 140 |
-| Vehicle loan or lease | 0.4468 | 0.7178 | 0.5509 | 225 |
+| Money transfer, virtual currency, or money service | 0.7065 | 0.7488 | 0.7271 | 418 |
+| Mortgage | 0.7722 | 0.8969 | 0.8299 | 291 |
+| Student loan | 0.5013 | 0.8972 | 0.6432 | 214 |
+| Vehicle loan or lease | 0.5299 | 0.7831 | 0.6321 | 249 |
 
 ---
 
@@ -113,5 +113,5 @@ To ensure tamper-evident governance in compliance environments, model artifact h
 ## 8. Limitations & Ethical Considerations
 
 1. **Uncalibrated Probability Estimates**: Model confidence scores represent softmax outputs and are explicitly documented in all UI components as *"uncalibrated probability estimates"*. Reviewers must evaluate probability margins ($P_1 - P_2$) rather than absolute values.
-2. **Class Imbalance & Long-Tail Categories**: Credit reporting complaints represent ~64.7% of the training distribution. While balanced class weighting mitigates majority bias, lower-volume categories (e.g., Vehicle loans at 1.7%) exhibit lower precision (44.7%).
-3. **Data Protection & Sealed Evaluation**: The held-out evaluation dataset (`test.csv`) remains sealed to prevent data leakage and preserve benchmark integrity.
+2. **Class Imbalance & Long-Tail Categories**: Credit reporting complaints represent ~64.7% of the corpus. Balanced class weighting mitigates majority bias, but lower-volume categories still have less validation support; Vehicle loan or lease precision is 0.5299 on 249 validation examples.
+3. **Data Protection & Held-Out Evaluation**: The held-out `test.csv` is excluded from this repository and runtime. It was used for the separately recorded, read-only [final evaluation](../nlp-service/models_saved/final_test_evaluation_report.md), without retraining or threshold adjustment.
