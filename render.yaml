@@ -1,5 +1,5 @@
 # Prepared API-only service. The NLP service is intentionally absent: the saved
-# BiLSTM workflow exceeded Render Free's 512 MB memory limit in local measurement.
+# NLP process peaked at 948.4 MiB on Linux/Python 3.12, above Render Free's 512 MiB.
 # Do not apply this Blueprint until a private, authenticated NLP endpoint exists.
 services:
   - type: web

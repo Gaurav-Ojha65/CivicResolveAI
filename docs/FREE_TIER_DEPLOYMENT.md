@@ -17,7 +17,9 @@ Render's [free deployment instructions](https://render.com/docs/your-first-deplo
 
 ### Measured NLP memory
 
-On Windows with the existing Python 3.14 virtual environment, one Uvicorn worker, the saved model artifacts, and one compute thread, the **actual port-owning Python process** used 650.3 MiB resident memory at startup, 650.6 MiB after baseline classification, and 1,027.8 MiB after reviewer BiLSTM comparison (peak 1,027.8 MiB). The baseline returned `Mortgage` for a fictional narrative and the comparison returned successfully. These are Windows measurements, not a Render or Python 3.12 deployment. The [deployment memory workflow](../.github/workflows/deployment-memory.yml) repeats the same paths on Linux/Python 3.12 and prints the process RSS and peak RSS. The BiLSTM checkpoint and baseline artifact are preserved; neither is retrained or removed.
+The [deployment memory run on GitHub Actions](https://github.com/Gaurav-Ojha65/CivicResolveAI/actions/runs/45438183392) used Linux and Python **3.12.16**, one Uvicorn worker, the saved artifacts, and one compute thread. The process used **890.4 MiB RSS at startup**, **891.7 MiB** after baseline classification, and **943.9 MiB** after BiLSTM comparison; its peak RSS was **948.4 MiB**. Both inference calls returned successfully. Even startup is **378.4 MiB above** Render Free's 512 MiB limit. The runner is not Render, but this is a real process measurement on the target Python version and operating-system family, not an artifact-size estimate. Render Free was not attempted.
+
+An additional local Windows/Python 3.14 measurement of the **actual port-owning Uvicorn process** found 650.3 MiB RSS at startup and 1,027.8 MiB after BiLSTM comparison. Its operating system, Python version, and dependency wheels differ from the Linux run, so the figures are separate observations. The [repeatable probe](../nlp-service/scripts/measure_render_memory.py) is committed; the BiLSTM checkpoint and baseline artifact are preserved, neither retrained nor removed.
 
 ## 2. Prepare a Neon database without deploying
 
@@ -52,7 +54,7 @@ The JDBC options request hostname and certificate verification using the Java tr
 
 ## 3. Prepare the Spring Boot API on Render Free
 
-The [Blueprint](../render.yaml) defines only `civicresolve-api`, `plan: free`, Java 25 via [backend/Dockerfile](../backend/Dockerfile), a `/api/health` health check, and `autoDeployTrigger: off`. [Render documents](https://render.com/docs/blueprint-spec) those Blueprint fields and [requires](https://render.com/docs/web-services) the app to listen on `0.0.0.0` and its `PORT`; Spring's embedded server binds all interfaces by default and now reads `PORT`. No credentials are in the file.
+The [Blueprint](../render.yaml) defines only `civicresolve-api`, `plan: free`, Java 25 via [backend/Dockerfile](../backend/Dockerfile), a `/api/health` health check, and `autoDeployTrigger: off`. [Render documents](https://render.com/docs/blueprint-spec) those Blueprint fields and [requires](https://render.com/docs/web-services) the app to listen on `0.0.0.0` and its `PORT`; Spring's embedded server binds all interfaces by default and now reads `PORT`. No credentials are in the file. The [Linux CI probe](https://github.com/Gaurav-Ojha65/CivicResolveAI/actions/runs/45438183392) built the Java 25 Docker image and started the API with `-Xmx256m -XX:+UseSerialGC`, disposable PostgreSQL 16, both restricted roles, and Flyway; startup RSS was **395.7 MiB**. This verifies startup on a CI runner, not Render operation or headroom under application traffic.
 
 **Do not apply the Blueprint yet.** The API needs a private, authenticated NLP endpoint for complaint submission and reviewer model comparison. Render Free supports public web services but not free private services, and the current NLP API has no service-to-service authentication. A public NLP URL would violate the application's security boundary. The API alone can pass `/api/health` while the primary submission journey still fails.
 
@@ -118,8 +120,15 @@ If that backend terminal is inside `backend`, run `.\mvnw.cmd spring-boot:run` i
 
 - Linux/Python 3.12 memory probe reports startup, baseline, and BiLSTM peak RSS below 512 MiB **with headroom**. If it exceeds 512 MiB, leave NLP off Render Free; never disable BiLSTM silently.
 - The API can reach NLP over a **private authenticated** channel. CORS alone is not NLP authentication.
-- Java 25 API starts on a 512 MiB Render instance, connects to Neon with the two distinct roles, and passes a fictional end-to-end journey after a cold start. This is not yet measured or deployed.
+- Java 25 API starts on a 512 MiB Render instance, connects to Neon with the two distinct roles, and passes a fictional end-to-end journey after a cold start. CI measured **395.7 MiB at startup only**; Render, Neon, and application-load memory remain untested.
 - Vercel deep links, exact CORS origin, in-memory reviewer login, and tracking secret flow work in the hosted environment.
 - No provider demanded a card or selected a paid tier. Monitor the published free allowances and stop if a limit or verification step conflicts with no-card operation.
 
-Until these checks pass, the correct status is **prepared configuration, local demo available, full cloud deployment blocked**.
+Until these checks pass, the correct status is **prepared configuration, local Quick Tunnel demo path documented, full cloud deployment blocked**.
+
+## Verification performed for this branch
+
+- [Full CI on the first deployment commit](https://github.com/Gaurav-Ojha65/CivicResolveAI/actions/runs/45438183215): frontend typecheck, **256/256 tests**, and production build passed; backend **301/301 unit and web tests** plus **30/30 PostgreSQL integration tests** passed; NLP **136 passed, 9 dataset-dependent skipped**.
+- [Deployment probes](https://github.com/Gaurav-Ojha65/CivicResolveAI/actions/runs/45438183392): Java 25 Docker image built; Java 25 API and Flyway started against disposable PostgreSQL at 395.7 MiB RSS; Python 3.12 baseline and BiLSTM calls succeeded but peaked at 948.4 MiB RSS. All three probe jobs completed successfully; **that success does not mean the NLP service fits Render Free**.
+- Locally, the Vercel JSON parsed, the Render and workflow YAML parsed, the Python memory probe compiled, and 45 local README/guide links resolved. Docker, Render CLI, and `cloudflared` are not installed on this machine.
+- No Neon, Render, Vercel, or Cloudflare resources were created. TLS to Neon, role grants on Neon, API load on Render, Vercel routing in production, and the Quick Tunnel walkthrough remain unexecuted.
