@@ -1,0 +1,113 @@
+name: Deployment memory probe
+
+on:
+  push:
+    branches:
+      - deploy/free-render-vercel-neon
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-image:
+    name: Build Java 25 Render image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image without deploying
+        run: docker build -f backend/Dockerfile -t civicresolve-api:free-tier-check backend
+
+  backend-memory:
+    name: Java 25 API startup memory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: civicresolve_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d civicresolve_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PORT: "18084"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/civicresolve_test
+      SPRING_DATASOURCE_USERNAME: civicresolve_app
+      SPRING_DATASOURCE_PASSWORD: app_password
+      SPRING_FLYWAY_URL: jdbc:postgresql://127.0.0.1:5432/civicresolve_test
+      SPRING_FLYWAY_USER: civicresolve_migrator
+      SPRING_FLYWAY_PASSWORD: migrator_password
+      REVIEWER_PASSWORD: ci_reviewer_password_not_for_production
+      DB_POOL_MAX_SIZE: "4"
+      DB_POOL_MIN_IDLE: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Create isolated PostgreSQL roles
+        run: |
+          psql -h 127.0.0.1 -U postgres -d civicresolve_test -v ON_ERROR_STOP=1 -c "CREATE ROLE civicresolve_migrator LOGIN PASSWORD 'migrator_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+          psql -h 127.0.0.1 -U postgres -d civicresolve_test -v ON_ERROR_STOP=1 -c "CREATE ROLE civicresolve_app LOGIN PASSWORD 'app_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+          psql -h 127.0.0.1 -U postgres -d civicresolve_test -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE civicresolve_test TO civicresolve_migrator, civicresolve_app"
+          psql -h 127.0.0.1 -U postgres -d civicresolve_test -v ON_ERROR_STOP=1 -c "ALTER SCHEMA public OWNER TO civicresolve_migrator"
+          psql -h 127.0.0.1 -U postgres -d civicresolve_test -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO civicresolve_app"
+      - name: Build the API without rerunning the unit suite
+        run: bash ./mvnw -B -ntp -Dmaven.test.skip=true package
+      - name: Measure API startup and Flyway migration memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -Xmx256m -XX:+UseSerialGC -jar target/civicresolve-backend-*.jar > /tmp/civicresolve-api-memory.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in {1..120}; do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:18084/api/health; then ready=1; break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            tail -n 35 /tmp/civicresolve-api-memory.log
+            exit 1
+          fi
+          rss_kib=$(awk '/^VmRSS:/ {print $2}' "/proc/$server_pid/status")
+          peak_kib=$(awk '/^VmHWM:/ {print $2}' "/proc/$server_pid/status")
+          printf 'Java 25 API + Flyway startup: RSS %.1f MiB, peak RSS %.1f MiB; Render Free limit 512 MiB\n' "$(awk "BEGIN {print $rss_kib/1024}")" "$(awk "BEGIN {print $peak_kib/1024}")"
+          if [ "$peak_kib" -ge 524288 ]; then echo 'Memory verdict: BLOCKED'; else echo 'Memory verdict: startup fits, application load untested'; fi
+
+  nlp-memory:
+    name: Python 3.12 NLP process memory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: nlp-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: nlp-service/requirements.txt
+      - name: Install existing NLP dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check dependency resolution
+        run: python -m pip check
+      - name: Measure startup, baseline, and BiLSTM memory
+        run: python scripts/measure_render_memory.py

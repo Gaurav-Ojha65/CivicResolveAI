@@ -192,7 +192,7 @@ OIDC identity management, containerized deployment, centralized observability, d
 
 ## Documentation
 
-[Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [Model card](docs/MODEL_CARD.md) · [Testing](docs/TESTING.md) · [Visual QA](docs/sprint2-visual-qa/README.md) · [Backend](backend/README.md) · [Frontend](frontend/README.md) · [NLP](nlp-service/README.md)
+[Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [Model card](docs/MODEL_CARD.md) · [Testing](docs/TESTING.md) · [Free-tier deployment preparation](docs/FREE_TIER_DEPLOYMENT.md) · [Visual QA](docs/sprint2-visual-qa/README.md) · [Backend](backend/README.md) · [Frontend](frontend/README.md) · [NLP](nlp-service/README.md)
 
 ## Maintainer and license
 
