@@ -5,7 +5,15 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { askAssistant, type AssistantAnswer } from './assistant-api';
 
 type Message = { role: 'user'; text: string } | { role: 'assistant'; data: AssistantAnswer };
-const starter = ['How do I submit a complaint?', 'How do I track it?', 'What does AI confidence mean?'];
+function starterQuestions(path: string): string[] {
+  if (path === '/submit') return ['What should I include in a complaint?', 'Which categories are supported?', 'What does AI confidence mean?'];
+  if (path === '/track') return ['How do I track a complaint?', 'What does pending review mean?', 'Why keep the tracking secret private?'];
+  if (path.startsWith('/reviewer/grievances/')) return ['What does classification confidence mean?', 'What is the top-two probability margin?', 'What triggers human review?'];
+  if (path === '/reviewer/audit') return ['How do the two models differ?', 'What does calibration mean?', 'What is macro F1?'];
+  if (path === '/reviewer/analytics') return ['What do analytics counts mean?', 'How is review history recorded?'];
+  if (path === '/reviewer') return ['How does the reviewer queue work?', 'What triggers human review?', 'Where is audit history?'];
+  return ['How do I submit a complaint?', 'How do I track it?', 'What does AI confidence mean?'];
+}
 const allowedRoutes = new Set(['/', '/submit', '/track', '/reviewer', '/reviewer/analytics', '/reviewer/audit']);
 
 function pageContext(path: string): string {
@@ -32,11 +40,12 @@ export function CivicAssist() {
   const previousReviewer = useRef(false);
   const previouslyOpen = useRef(false);
   const lastQuestion = useRef('');
+  const generation = useRef(0);
 
   const reviewer = pathname.startsWith('/reviewer') && pathname !== '/reviewer/login' && isAuthenticated;
   useEffect(() => {
     if (previousReviewer.current && !reviewer) {
-      abort.current?.abort(); setMessages([]); setDraft(''); setError(''); setOpen(false);
+      clear(); setOpen(false);
     }
     previousReviewer.current = reviewer;
   }, [reviewer]);
@@ -67,17 +76,18 @@ export function CivicAssist() {
     setMessages(current => [...current, { role: 'user', text: clean }]);
     setDraft(''); setError(''); setBusy(true);
     const controller = new AbortController(); abort.current = controller;
+    const requestGeneration = generation.current;
     try {
       const data = await askAssistant(clean, pageContext(pathname), language, mode,
         prior?.data.knowledgeId ?? null, reviewer, controller.signal);
-      if (!controller.signal.aborted) setMessages(current => [...current, { role: 'assistant', data }]);
+      if (!controller.signal.aborted && requestGeneration === generation.current) setMessages(current => [...current, { role: 'assistant', data }]);
     } catch {
-      if (!controller.signal.aborted) setError('CivicAssist is unavailable. Try again when the connection returns.');
-    } finally { if (!controller.signal.aborted) setBusy(false); }
+      if (!controller.signal.aborted && requestGeneration === generation.current) setError('CivicAssist is unavailable. Try again when the connection returns.');
+    } finally { if (requestGeneration === generation.current) { setBusy(false); abort.current = null; } }
   }
 
   function close() { setOpen(false); }
-  function clear() { abort.current?.abort(); setBusy(false); setMessages([]); setError(''); setDraft(''); input.current?.focus(); }
+  function clear() { generation.current++; abort.current?.abort(); abort.current = null; setBusy(false); setMessages([]); setError(''); setDraft(''); setContextQuestion(null); lastQuestion.current = ''; input.current?.focus(); }
 
   return <div className={`fixed right-4 z-40 print:hidden sm:bottom-6 sm:right-6 ${pathname.startsWith('/reviewer/grievances/') ? 'bottom-20' : 'bottom-4'}`}>
     {!open && <button ref={launcher} type="button" aria-label="Open CivicAssist AI" onClick={() => setOpen(true)}
@@ -106,11 +116,13 @@ export function CivicAssist() {
         <button type="button" aria-label="Clear conversation" onClick={clear} className="ml-auto rounded p-2 hover:bg-canvas"><Trash2 size={16} /></button>
       </div>
       <div ref={scroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
-        {messages.length === 0 && <div className="space-y-4"><p className="text-sm leading-relaxed text-ink-muted">Ask about submitting, tracking, complaint statuses, or how AI classification works. I cannot access or change your case.</p><div className="flex flex-wrap gap-2">{starter.map(question => <button key={question} type="button" onClick={() => void send(question)} className="rounded-full border border-teal-trust/30 px-3 py-2 text-left text-xs text-teal-trust hover:bg-teal-50">{question}</button>)}</div></div>}
+        {messages.length === 0 && <div className="space-y-4"><p className="text-sm leading-relaxed text-ink-muted">Ask about submitting, tracking, complaint statuses, or how AI classification works. I cannot access or change your case.</p><div className="flex flex-wrap gap-2">{starterQuestions(pathname).map(question => <button key={question} type="button" onClick={() => void send(question)} className="rounded-full border border-teal-trust/30 px-3 py-2 text-left text-xs text-teal-trust hover:bg-teal-50">{question}</button>)}</div></div>}
         {messages.map((message, index) => message.role === 'user'
           ? <p key={index} className="ml-8 rounded-xl bg-ink-deep p-3 text-sm text-white">{message.text}</p>
           : <article key={index} className="mr-5 space-y-2 rounded-xl bg-canvas p-3 text-sm text-ink"><p className="whitespace-pre-wrap leading-relaxed">{message.data.answer}</p><p className="text-xs text-ink-muted">{message.data.responseMode === 'local' ? 'Verified local knowledge' : `Generated explanation · ${message.data.model ?? 'configured model'}`}</p>
-            {message.data.sources.length > 0 && <p className="text-xs text-ink-muted">Source: {message.data.sources.map(source => source.title).join(', ')}</p>}
+            {message.data.sources.length > 0 && <div className="text-xs text-ink-muted">Sources: <ul className="list-inside list-disc">{message.data.sources.map(source => <li key={source.id}>{source.reference === 'README.md' || /^docs\/[A-Za-z0-9_./-]+$/.test(source.reference)
+              ? <a className="underline hover:text-teal-trust" href={`https://github.com/Gaurav-Ojha65/CivicResolveAI/blob/main/${source.reference}`} target="_blank" rel="noopener noreferrer">{source.title}</a>
+              : <span title={source.reference}>{source.title}</span>}</li>)}</ul></div>}
             {message.data.warning && <p className="text-xs text-ink-muted">{message.data.warning}</p>}
             {message.data.followUps.length > 0 && <div className="flex flex-wrap gap-1">{message.data.followUps.map(question => <button key={question} type="button" onClick={() => void send(question)} className="rounded-full border border-line px-2 py-1 text-xs text-ink-muted hover:bg-white">{question}</button>)}</div>}
             <div className="flex flex-wrap gap-2">{message.data.navigation.filter(item => allowedRoutes.has(item.route) || item.route === '/reviewer/grievances').map(item => <Link key={item.route} to={item.route === '/reviewer/grievances' ? '/reviewer' : item.route} className="text-xs font-semibold text-teal-trust underline">{item.label}</Link>)}</div>

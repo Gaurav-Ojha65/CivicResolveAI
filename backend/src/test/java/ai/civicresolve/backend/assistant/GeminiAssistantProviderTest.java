@@ -16,7 +16,7 @@ class GeminiAssistantProviderTest {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/generate", exchange -> {
             payload.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] body = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Use the Track page.\"}]}}]}".getBytes(StandardCharsets.UTF_8);
+            byte[] body = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"{\\\"answer\\\":\\\"Use the Track page.\\\",\\\"sourceIds\\\":[\\\"tracking\\\"]}\"}]}}]}".getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
             exchange.close();
@@ -27,7 +27,9 @@ class GeminiAssistantProviderTest {
                     1000, new ObjectMapper(), java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/generate"));
             assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isEqualTo("Use the Track page.");
             assertThat(payload.get()).contains("Use the Track page.", "tracking")
+                    .contains("responseMimeType", "application/json")
                     .doesNotContain("test-key", "trk_", "reviewer", "raw question", "private note");
+            assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isEqualTo("Use the Track page.");
         } finally { server.stop(0); }
     }
 
@@ -70,6 +72,29 @@ class GeminiAssistantProviderTest {
             GeminiAssistantProvider provider = new GeminiAssistantProvider(true, "gemini", "test-key", "test-model", 1,
                     1000, new ObjectMapper(), uri);
             assertThat(provider.generate("tracking", "Track", "Approved text", "docs/SECURITY.md")).isNull();
+        } finally { server.stop(0); }
+    }
+
+    @Test void unsupportedCitationOrInventedContentIsRejected() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        java.util.concurrent.atomic.AtomicInteger count = new java.util.concurrent.atomic.AtomicInteger();
+        server.createContext("/generate", exchange -> {
+            String text = count.incrementAndGet() == 1
+                    ? "{\"answer\":\"Use the Track page.\",\"sourceIds\":[\"other\"]}"
+                    : "{\"answer\":\"Guaranteed instant refund.\",\"sourceIds\":[\"tracking\"]}";
+            String encoded = new ObjectMapper().writeValueAsString(text);
+            byte[] body = ("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":" + encoded + "}]}}]}").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var uri = java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/generate");
+            GeminiAssistantProvider provider = new GeminiAssistantProvider(true, "gemini", "test-key", "test-model", 3,
+                    1000, new ObjectMapper(), uri);
+            assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isNull();
+            assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isNull();
         } finally { server.stop(0); }
     }
 

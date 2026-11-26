@@ -14,6 +14,10 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.Set;
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -30,6 +34,9 @@ public class GeminiAssistantProvider implements AssistantProvider {
     private final URI endpoint;
     private final Semaphore inFlight = new Semaphore(3);
     private final AtomicInteger calls = new AtomicInteger();
+    private final AtomicInteger failures = new AtomicInteger();
+    private final Map<String, String> cache = new ConcurrentHashMap<>();
+    private volatile long openUntilMs;
     private volatile LocalDate day = LocalDate.now(ZoneOffset.UTC);
 
     @Autowired
@@ -65,7 +72,11 @@ public class GeminiAssistantProvider implements AssistantProvider {
     @Override
     public String generate(String canonicalId, String title, String approvedAnswer, String source) {
         if (!enabled || !"gemini".equals(provider) || key.isBlank()
-                || !model.matches("[a-zA-Z0-9._-]{3,80}") || !inFlight.tryAcquire()) return null;
+                || !model.matches("[a-zA-Z0-9._-]{3,80}") || System.currentTimeMillis() < openUntilMs) return null;
+        String cacheKey = model + ":" + canonicalId + ":" + approvedAnswer;
+        String cached = cache.get(cacheKey);
+        if (cached != null) return cached;
+        if (!inFlight.tryAcquire()) return null;
         try {
             synchronized (calls) {
                 LocalDate today = LocalDate.now(ZoneOffset.UTC);
@@ -74,30 +85,53 @@ public class GeminiAssistantProvider implements AssistantProvider {
                 calls.incrementAndGet();
             }
             // No user question, conversation, identifiers, database records or reviewer material enters this payload.
-            String prompt = "Rewrite this approved public CivicResolve knowledge in plain English. "
-                    + "Do not add facts, links, advice or instructions. Keep the answer under 500 characters. "
-                    + "Topic: " + canonicalId + ". Approved answer: " + approvedAnswer;
+            String prompt = "Rewrite only this approved public CivicResolve knowledge in plain English. "
+                    + "Do not add facts, links, advice or instructions. Return JSON with answer and sourceIds. "
+                    + "The only allowed source ID is " + canonicalId + ". Canonical question: " + title
+                    + ". Approved answer: " + approvedAnswer;
             String body = mapper.writeValueAsString(Map.of("contents", new Object[]{
                     Map.of("parts", new Object[]{Map.of("text", prompt)})},
-                    "generationConfig", Map.of("maxOutputTokens", 160, "temperature", 0.1)));
+                    "generationConfig", Map.of("maxOutputTokens", 220, "temperature", 0.1,
+                            "responseMimeType", "application/json")));
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(endpoint)
                     .header("x-goog-api-key", key).header("Content-Type", "application/json")
                     .timeout(timeout).POST(HttpRequest.BodyPublishers.ofString(body)).build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200 || response.body().length() > 16_000) return null;
+            if (response.statusCode() != 200 || response.body().length() > 16_000) {
+                if (response.statusCode() == 429) openUntilMs = System.currentTimeMillis() + 60_000;
+                failed(); return null;
+            }
             JsonNode root = mapper.readTree(response.body());
             JsonNode candidates = root.path("candidates");
-            if (!candidates.isArray() || candidates.isEmpty()) return null;
+            if (!candidates.isArray() || candidates.isEmpty()) { failed(); return null; }
             JsonNode parts = candidates.get(0).path("content").path("parts");
-            if (!parts.isArray() || parts.isEmpty()) return null;
-            String text = parts.get(0).path("text").asText("").strip();
-            if (text.isBlank() || text.length() > 700 || text.contains("http://") || text.contains("https://")) return null;
-            return text;
+            if (!parts.isArray() || parts.isEmpty()) { failed(); return null; }
+            JsonNode result = mapper.readTree(parts.get(0).path("text").asText(""));
+            JsonNode sourceIds = result.path("sourceIds");
+            String answer = result.path("answer").asText("").strip();
+            if (!sourceIds.isArray() || sourceIds.size() != 1 || !canonicalId.equals(sourceIds.get(0).asText())
+                    || answer.isBlank() || answer.length() > 700 || answer.contains("http://") || answer.contains("https://")
+                    || !grounded(answer, approvedAnswer)) { failed(); return null; }
+            failures.set(0);
+            if (cache.size() < 256) cache.put(cacheKey, answer);
+            return answer;
         } catch (Exception ex) {
+            failed();
             return null;
         } finally {
             inFlight.release();
         }
+    }
+
+    private void failed() {
+        if (failures.incrementAndGet() >= 3) openUntilMs = System.currentTimeMillis() + 60_000;
+    }
+
+    private boolean grounded(String answer, String approved) {
+        Set<String> approvedWords = Arrays.stream((approved + " CivicResolve").toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
+                .filter(s -> s.length() > 4).collect(java.util.stream.Collectors.toSet());
+        return Arrays.stream(answer.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
+                .filter(s -> s.length() > 4).allMatch(approvedWords::contains);
     }
 }

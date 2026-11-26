@@ -44,9 +44,32 @@ class AssistantControllerTest {
         verify(service).answer(any(), eq(true), any());
     }
 
+    @Test void untrustedForwardedHeaderCannotChooseRateLimitIdentity() throws Exception {
+        when(service.answer(any(), eq(false), eq("198.51.100.10")))
+                .thenReturn(new Answer("Public answer", List.of(), List.of(), List.of(), "local", null, null, null));
+        mvc.perform(post("/api/assistant/chat").with(request -> {
+                    request.setRemoteAddr("198.51.100.10");
+                    return request;
+                }).header("X-Forwarded-For", "203.0.113.77")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"question\":\"How do I submit?\"}"))
+                .andExpect(status().isOk());
+        verify(service).answer(any(), eq(false), eq("198.51.100.10"));
+    }
+
     @Test void invalidQuestionReturnsValidationProblem() throws Exception {
         mvc.perform(post("/api/assistant/chat").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"question\":\"   \"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.title").value("Validation Failed"));
+    }
+
+    @Test void rejectsOversizedOrUnsupportedOptionalFields() throws Exception {
+        for (String body : List.of(
+                "{\"question\":\"status\",\"page\":\"/admin\"}",
+                "{\"question\":\"status\",\"language\":\"fr\"}",
+                "{\"question\":\"status\",\"mode\":\"unsafe\"}",
+                "{\"question\":\"status\",\"previousKnowledgeId\":\"" + "x".repeat(300) + "\"}")) {
+            mvc.perform(post("/api/assistant/chat").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }

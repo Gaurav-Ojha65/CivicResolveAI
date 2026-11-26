@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Label } from '../../components/ui/Label';
 import { SubmissionReceipt } from './SubmissionReceipt';
 import { IntakeSafeguardInspector } from './components/IntakeSafeguardInspector';
+import { ExplainButton } from '../assistant/ExplainButton';
 
 /** Minimum and maximum description lengths enforced by backend. */
 const MIN_LENGTH = 20;
@@ -223,6 +224,7 @@ export const SubmitGrievancePage: React.FC = () => {
             <div className="mt-6">
               <Label htmlFor={descriptionId} required>Complaint description</Label>
               <p id="description-hint" className="mb-2 mt-1 text-sm text-ink-muted">Leave out names, account numbers and contact details. Enter 20 to 5,000 characters.</p>
+              <div className="mb-3"><ExplainButton question="What information should I include in a complaint?" /></div>
               <textarea id={descriptionId} value={description} rows={7} required aria-required="true"
                 disabled={isSubmitting} aria-invalid={descriptionHasError}
                 aria-describedby={descriptionHasError ? 'description-hint submission-errors' : 'description-hint'}

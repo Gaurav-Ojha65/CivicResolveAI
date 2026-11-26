@@ -7,7 +7,7 @@ import { ErrorBoundary } from '../components/layout/ErrorBoundary';
 import { PublicLayout } from '../components/layout/PublicLayout';
 import { CivicAssist } from '../features/assistant/CivicAssist';
 
-function RouteFrame() {
+export function RouteFrame() {
   const { pathname } = useLocation();
   const matches = useMatches();
   const page = matches[matches.length - 1]?.handle as { title: string } | undefined;
@@ -24,13 +24,15 @@ function RouteFrame() {
     }
   }, [pathname, title]);
 
-  return (
+  return <>
     <ErrorBoundary key={pathname}>
       {navigation.state === 'loading' && <p role="status" className="sr-only">Loading page…</p>}
       <Outlet />
+    </ErrorBoundary>
+    <ErrorBoundary fallback={<span className="sr-only">Assistant unavailable</span>}>
       <CivicAssist />
     </ErrorBoundary>
-  );
+  </>;
 }
 
 export const router = createBrowserRouter([{

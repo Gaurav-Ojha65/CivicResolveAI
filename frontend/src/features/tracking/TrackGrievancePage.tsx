@@ -11,6 +11,7 @@ import { StatusIndicator } from '../../components/ui/StatusIndicator';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
+import { ExplainButton } from '../assistant/ExplainButton';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SECRET_REGEX = /^trk_[A-Za-z0-9_-]{43}$/;
@@ -209,6 +210,7 @@ export const TrackGrievancePage: React.FC = () => {
           <h2 ref={resultRef} tabIndex={-1} className="text-2xl font-semibold tracking-tight">Case summary</h2>
           <div className="mt-3 flex flex-wrap items-center gap-2"><StatusIndicator status={trackingData.status} /><StatusIndicator priority={trackingData.priority} /></div>
           <p className="mt-3 text-base">{progressByStatus[trackingData.status]}</p>
+          <div className="mt-3"><ExplainButton question={`What does ${trackingData.status} status mean?`} /></div>
           <dl className="mt-5 grid gap-x-6 gap-y-4 border-t border-line pt-5 text-sm sm:grid-cols-2">
             <div><dt className="text-ink-muted">Reference ID</dt><dd className="mt-1 flex items-center gap-2">
               <span className="break-all font-mono">{trackingData.referenceId}</span>
