@@ -125,3 +125,7 @@ jobs:
 
       - name: Run NLP tests
         run: python -m pytest tests -q -ra
+
+      - name: Check Gemini benchmark safety
+        working-directory: .
+        run: python -m unittest discover -s scripts -p test_civicassist_gemini_benchmark.py -v

@@ -13,9 +13,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GeminiAssistantProviderTest {
     @Test void outboundPayloadContainsOnlyCuratedKnowledge() throws Exception {
         AtomicReference<String> payload = new AtomicReference<>();
+        AtomicReference<String> header = new AtomicReference<>();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/generate", exchange -> {
             payload.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            header.set(exchange.getRequestHeaders().getFirst("x-goog-api-key"));
             byte[] body = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"{\\\"answer\\\":\\\"Use the Track page.\\\",\\\"sourceIds\\\":[\\\"tracking\\\"]}\"}]}}]}".getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
@@ -29,6 +31,7 @@ class GeminiAssistantProviderTest {
             assertThat(payload.get()).contains("Use the Track page.", "tracking")
                     .contains("responseMimeType", "application/json")
                     .doesNotContain("test-key", "trk_", "reviewer", "raw question", "private note");
+            assertThat(header.get()).isEqualTo("test-key");
             assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isEqualTo("Use the Track page.");
         } finally { server.stop(0); }
     }
@@ -95,6 +98,59 @@ class GeminiAssistantProviderTest {
                     1000, new ObjectMapper(), uri);
             assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isNull();
             assertThat(provider.generate("tracking", "Track", "Use the Track page.", "docs/SECURITY.md")).isNull();
+        } finally { server.stop(0); }
+    }
+
+    @Test void reversalsOfNegationAndActorAreRejected() throws Exception {
+        AtomicReference<String> generated = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/generate", exchange -> {
+            String encoded = new ObjectMapper().writeValueAsString(generated.get());
+            byte[] body = ("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":" + encoded + "}]}}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var uri = java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/generate");
+            generated.set("{\"answer\":\"AI classification does approve complaints.\",\"sourceIds\":[\"approval\"]}");
+            assertThat(new GeminiAssistantProvider(true, "gemini", "test-key", "test-model", 2, 1000,
+                    new ObjectMapper(), uri).generate("approval", "Approval", "AI classification does not approve complaints.", "README.md"))
+                    .isNull();
+            generated.set("{\"answer\":\"AI can override a reviewer.\",\"sourceIds\":[\"review\"]}");
+            assertThat(new GeminiAssistantProvider(true, "gemini", "test-key", "test-model", 2, 1000,
+                    new ObjectMapper(), uri).generate("review", "Review", "A reviewer can override AI.", "README.md"))
+                    .isNull();
+            generated.set("{\"answer\":\"AI classification does not approve complaints.\",\"sourceIds\":[\"approval\"]}");
+            assertThat(new GeminiAssistantProvider(true, "gemini", "test-key", "test-model", 2, 1000,
+                    new ObjectMapper(), uri).generate("approval", "Approval", "AI classification does not approve complaints.", "README.md"))
+                    .isEqualTo("AI classification does not approve complaints.");
+        } finally { server.stop(0); }
+    }
+
+    @Test void hindiPublicKnowledgeUsesHindiInstructionAndKeepsNegation() throws Exception {
+        AtomicReference<String> payload = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/generate", exchange -> {
+            payload.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            String text = "{\"answer\":\"CivicAssist को गोपनीय कोड नहीं बताएं।\",\"sourceIds\":[\"secret_hi\"]}";
+            String encoded = new ObjectMapper().writeValueAsString(text);
+            byte[] body = ("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":" + encoded + "}]}}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var uri = java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/generate");
+            GeminiAssistantProvider provider = new GeminiAssistantProvider(true, "gemini", "test-key", "test-model", 1,
+                    1000, new ObjectMapper(), uri);
+            assertThat(provider.generate("secret_hi", "गोपनीय कोड", "CivicAssist को गोपनीय कोड नहीं बताएं।",
+                    "docs/SECURITY.md", "hi")).isEqualTo("CivicAssist को गोपनीय कोड नहीं बताएं।");
+            assertThat(payload.get()).contains("plain Hindi", "secret_hi").doesNotContain("test-key");
         } finally { server.stop(0); }
     }
 

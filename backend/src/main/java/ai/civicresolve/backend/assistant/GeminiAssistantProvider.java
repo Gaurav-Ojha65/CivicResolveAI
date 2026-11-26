@@ -15,8 +15,12 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Set;
-import java.util.Arrays;
 import java.util.Locale;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,6 +28,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Optional public-knowledge rephrasing. Failures return null and never affect the main workflows. */
 @Component
 public class GeminiAssistantProvider implements AssistantProvider {
+    private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{M}\\p{N}]+");
+    private static final Set<String> MEANING_MARKERS = Set.of("no", "not", "never", "only", "must", "may",
+            "can", "cannot", "should", "without", "except", "before", "after", "all", "every", "always",
+            "नहीं", "केवल", "सिर्फ", "बिना", "ज़रूरी", "अनिवार्य");
     private final boolean enabled;
     private final String provider;
     private final String key;
@@ -71,9 +79,15 @@ public class GeminiAssistantProvider implements AssistantProvider {
 
     @Override
     public String generate(String canonicalId, String title, String approvedAnswer, String source) {
+        return generate(canonicalId, title, approvedAnswer, source, "en");
+    }
+
+    @Override
+    public String generate(String canonicalId, String title, String approvedAnswer, String source, String language) {
         if (!enabled || !"gemini".equals(provider) || key.isBlank()
+                || !("en".equals(language) || "hi".equals(language))
                 || !model.matches("[a-zA-Z0-9._-]{3,80}") || System.currentTimeMillis() < openUntilMs) return null;
-        String cacheKey = model + ":" + canonicalId + ":" + approvedAnswer;
+        String cacheKey = model + ":" + language + ":" + canonicalId + ":" + approvedAnswer;
         String cached = cache.get(cacheKey);
         if (cached != null) return cached;
         if (!inFlight.tryAcquire()) return null;
@@ -85,7 +99,8 @@ public class GeminiAssistantProvider implements AssistantProvider {
                 calls.incrementAndGet();
             }
             // No user question, conversation, identifiers, database records or reviewer material enters this payload.
-            String prompt = "Rewrite only this approved public CivicResolve knowledge in plain English. "
+            String prompt = "Rewrite only this approved public CivicResolve knowledge in plain "
+                    + ("hi".equals(language) ? "Hindi" : "English") + ". "
                     + "Do not add facts, links, advice or instructions. Return JSON with answer and sourceIds. "
                     + "The only allowed source ID is " + canonicalId + ". Canonical question: " + title
                     + ". Approved answer: " + approvedAnswer;
@@ -129,9 +144,32 @@ public class GeminiAssistantProvider implements AssistantProvider {
     }
 
     private boolean grounded(String answer, String approved) {
-        Set<String> approvedWords = Arrays.stream((approved + " CivicResolve").toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
-                .filter(s -> s.length() > 4).collect(java.util.stream.Collectors.toSet());
-        return Arrays.stream(answer.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
-                .filter(s -> s.length() > 4).allMatch(approvedWords::contains);
+        List<String> source = words(approved);
+        List<String> output = words(answer);
+        if (output.isEmpty()) return false;
+        // A bag-of-words match can turn "does not approve" into "does approve", or swap actor and object.
+        // Accept only ordered, extractive wording; any unverified paraphrase uses the local answer.
+        int sourceIndex = 0;
+        for (String word : output) {
+            while (sourceIndex < source.size() && !source.get(sourceIndex).equals(word)) sourceIndex++;
+            if (sourceIndex == source.size()) return false;
+            sourceIndex++;
+        }
+        for (String marker : MEANING_MARKERS) {
+            if (Collections.frequency(source, marker) != Collections.frequency(output, marker)) return false;
+        }
+        for (String word : source) {
+            if (word.chars().allMatch(Character::isDigit)
+                    && Collections.frequency(source, word) != Collections.frequency(output, word)) return false;
+        }
+        return true;
+    }
+
+    private List<String> words(String value) {
+        Matcher matcher = WORD.matcher(java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC)
+                .toLowerCase(Locale.ROOT));
+        List<String> result = new ArrayList<>();
+        while (matcher.find()) result.add(matcher.group());
+        return result;
     }
 }

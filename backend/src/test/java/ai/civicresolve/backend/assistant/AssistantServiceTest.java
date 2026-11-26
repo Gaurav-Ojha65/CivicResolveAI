@@ -59,6 +59,23 @@ class AssistantServiceTest {
         assertThat(answer.answer()).contains("Submit पेज");
     }
 
+    @Test void publicHindiEntryUsesHindiProviderContextButTechnicalModeStaysLocal() {
+        java.util.concurrent.atomic.AtomicReference<String> sent = new java.util.concurrent.atomic.AtomicReference<>();
+        AssistantService withProvider = new AssistantService(new AssistantProvider() {
+            public String generate(String id, String title, String answer, String source) { return null; }
+            public String generate(String id, String title, String answer, String source, String language) {
+                sent.set(id + ":" + language);
+                return null;
+            }
+            public String model() { return "test"; }
+        }, new AssistantRateLimiter());
+        withProvider.answer(new Question("शिकायत कैसे दर्ज करें", "/submit", "hi", "simple", null), false, "hindi-provider");
+        assertThat(sent.get()).isEqualTo("submit_hi:hi");
+        sent.set(null);
+        withProvider.answer(new Question("शिकायत कैसे दर्ज करें", "/submit", "hi", "technical", null), false, "hindi-technical");
+        assertThat(sent.get()).isNull();
+    }
+
     @Test void languageSwitchesFollowUpAcrossAuthorizedTranslations() {
         Answer hindi = service.answer(new Question("Explain confidence in Hindi", "/submit", "en", "simple", "confidence"), false, "translation-1");
         assertThat(hindi.knowledgeId()).isEqualTo("confidence_hi");

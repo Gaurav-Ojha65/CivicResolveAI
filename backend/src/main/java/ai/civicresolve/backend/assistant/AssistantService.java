@@ -123,8 +123,9 @@ public class AssistantService {
         if (followUp && lowerQuestion.contains("example")) local += example(best.id);
         if ("technical".equalsIgnoreCase(request.mode())) local += technical(baseId(best.id), best.category);
         String generated = null;
-        if (second == null && best.audience.equals("PUBLIC") && language.equals("en") && !followUp) {
-            generated = provider.generate(best.id, best.title, best.answer, best.source);
+        if (second == null && best.audience.equals("PUBLIC") && language.equals(best.language)
+                && !followUp && !"technical".equalsIgnoreCase(request.mode())) {
+            generated = provider.generate(best.id, best.title, best.answer, best.source, language);
         }
         String answer = generated == null ? local : generated;
         List<Source> sources = new ArrayList<>();
