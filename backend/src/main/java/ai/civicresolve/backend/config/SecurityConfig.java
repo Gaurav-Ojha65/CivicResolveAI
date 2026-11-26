@@ -158,6 +158,7 @@ public class SecurityConfig {
                     // Public endpoints
                     .requestMatchers(HttpMethod.POST, "/api/grievances").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/grievances/track").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/assistant/chat").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/product-categories").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                     // All other API endpoints require REVIEWER role

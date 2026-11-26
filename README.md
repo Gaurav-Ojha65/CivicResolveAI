@@ -56,6 +56,8 @@ All screenshots below come from the running application with fictional data. The
 
 ## What works
 
+**CivicAssist AI:** A read-only, context-aware guide now answers curated questions about submission, tracking, reviewer workflows, and model terminology. It provides sources and safe navigation, with a local fallback that needs no API key. Optional Gemini rephrasing is disabled by default and accepts only approved public knowledge; no complaint text is sent. See [architecture, privacy boundary, configuration, and measured evaluation](docs/CIVICASSIST.md). Live model benchmarking and visual verification are still pending; no assistant screenshots are claimed here.
+
 | Citizen portal | Reviewer workspace | AI and decision support |
 | --- | --- | --- |
 | Narrative submission and preliminary category/priority assessment | HTTP Basic reviewer access with credentials held in browser memory | TF-IDF + balanced Logistic Regression serves intake across eight CFPB product categories |

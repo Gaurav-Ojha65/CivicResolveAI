@@ -5,6 +5,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from '../features/reviewer/ProtectedRoute';
 import { ErrorBoundary } from '../components/layout/ErrorBoundary';
 import { PublicLayout } from '../components/layout/PublicLayout';
+import { CivicAssist } from '../features/assistant/CivicAssist';
 
 function RouteFrame() {
   const { pathname } = useLocation();
@@ -27,6 +28,7 @@ function RouteFrame() {
     <ErrorBoundary key={pathname}>
       {navigation.state === 'loading' && <p role="status" className="sr-only">Loading page…</p>}
       <Outlet />
+      <CivicAssist />
     </ErrorBoundary>
   );
 }

@@ -42,6 +42,7 @@ import {
   TriagePriority,
 } from '../../types/grievance';
 import { ApiError } from '../../lib/errors/api-error';
+import { ExplainButton } from '../assistant/ExplainButton';
 
 function getCaseAgeInfo(submittedAt: string) {
   const submitTime = new Date(submittedAt).getTime();
@@ -976,6 +977,12 @@ function CaseReview({ id }: { id: string | undefined }) {
                   onFeatureSelect={handleFeatureSelect}
                 />
               )}
+
+              <div className="flex flex-wrap gap-2">
+                <ExplainButton question="What does classification confidence mean?" />
+                <ExplainButton question="What is the top-two probability margin?" />
+                <ExplainButton question="What are influential words in the AI explanation?" />
+              </div>
 
               {/* 8-Class Probability & Top-2 Margin Meter */}
               {prediction && (
