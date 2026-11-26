@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import statistics
 import sys
+import tempfile
 import time
 import unicodedata
 from urllib.error import HTTPError, URLError
@@ -22,6 +23,15 @@ KNOWLEDGE = ROOT / "backend/src/main/resources/assistant/knowledge.tsv"
 REPORT = ROOT / "backend/target/civicassist_gemini_benchmark.json"
 API = "https://generativelanguage.googleapis.com/v1beta/models"
 MODELS = ("gemini-3.8-flash", "gemini-3.5-flash-lite")
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "sourceIds": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 1},
+    },
+    "required": ["answer", "sourceIds"],
+    "additionalProperties": False,
+}
 CASES = (
     ("tracking", "en", "English tracking", None),
     ("confidence", "en", "English model explanation", None),
@@ -86,7 +96,7 @@ def knowledge() -> dict[str, dict[str, str]]:
     return entries
 
 
-def request_json(url: str, key: str, payload: dict | None, timeout: int) -> dict:
+def request_json(url: str, key: str, payload: dict | None, timeout: int) -> object:
     body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = Request(url, data=body, headers={"x-goog-api-key": key,
                       "Content-Type": "application/json"}, method="GET" if body is None else "POST")
@@ -100,11 +110,18 @@ def listed_models(key: str) -> dict[str, bool]:
     while True:
         url = API + "?pageSize=1000" + ("&pageToken=" + quote(page_token, safe="") if page_token else "")
         data = request_json(url, key, None, 15)
-        for model in data.get("models", []):
-            name = model.get("name", "").removeprefix("models/")
+        if not isinstance(data, dict) or not isinstance(data.get("models"), list):
+            raise ValueError("Invalid model list response")
+        for model in data["models"]:
+            if not isinstance(model, dict) or not isinstance(model.get("name"), str):
+                raise ValueError("Invalid model entry")
+            name = model["name"].removeprefix("models/")
             if name in MODELS:
-                found[name] = "generateContent" in model.get("supportedGenerationMethods", [])
+                methods = model.get("supportedGenerationMethods")
+                found[name] = isinstance(methods, list) and "generateContent" in methods
         page_token = data.get("nextPageToken", "")
+        if not isinstance(page_token, str):
+            raise ValueError("Invalid model list page token")
         if not page_token:
             break
     return found
@@ -118,47 +135,126 @@ def prompt(entry: dict[str, str], language: str) -> str:
             + entry["title"] + ". Approved answer: " + entry["answer"])
 
 
+def generation_payload(entry: dict[str, str], language: str) -> dict:
+    return {"contents": [{"parts": [{"text": prompt(entry, language)}]}],
+            "generationConfig": {"maxOutputTokens": 220, "temperature": 0.1,
+                                 "responseMimeType": "application/json",
+                                 "responseJsonSchema": RESPONSE_SCHEMA}}
+
+
+def validate_response(response: object, entry: dict[str, str], result: dict) -> None:
+    if not isinstance(response, dict):
+        result["rejectionReason"] = "invalid_response_structure"
+        return
+    usage = response.get("usageMetadata")
+    if isinstance(usage, dict):
+        for field, api_field in (("promptTokens", "promptTokenCount"),
+                                 ("candidateTokens", "candidatesTokenCount"),
+                                 ("totalTokens", "totalTokenCount")):
+            count = usage.get(api_field)
+            if type(count) is int and count >= 0:
+                result[field] = count
+    candidates = response.get("candidates")
+    if not isinstance(candidates, list) or not candidates or not isinstance(candidates[0], dict):
+        result["rejectionReason"] = "invalid_response_structure"
+        return
+    candidate = candidates[0]
+    finish_reason = candidate.get("finishReason")
+    if isinstance(finish_reason, str):
+        result["finishReason"] = finish_reason
+    if finish_reason != "STOP":
+        result["rejectionReason"] = "incomplete_candidate"
+        return
+    content = candidate.get("content")
+    parts = content.get("parts") if isinstance(content, dict) else None
+    if not isinstance(parts, list) or not parts or not isinstance(parts[0], dict):
+        result["rejectionReason"] = "invalid_response_structure"
+        return
+    raw = parts[0].get("text")
+    if not isinstance(raw, str) or not raw:
+        result["rejectionReason"] = "invalid_response_structure"
+        return
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        result["rejectionReason"] = "invalid_generated_json"
+        return
+    if not isinstance(parsed, dict):
+        result["rejectionReason"] = "invalid_generated_structure"
+        return
+    answer = parsed.get("answer")
+    citations = parsed.get("sourceIds")
+    if not isinstance(answer, str) or not isinstance(citations, list) or len(citations) != 1 \
+            or not isinstance(citations[0], str):
+        result["rejectionReason"] = "invalid_generated_structure"
+        return
+    result["generatedAnswer"] = answer
+    result["citationCorrect"] = citations == [entry["id"]]
+    if not result["citationCorrect"]:
+        result["rejectionReason"] = "invalid_citation"
+        return
+    answer = answer.strip()
+    if not answer or len(answer) > 700 or "http://" in answer or "https://" in answer \
+            or not grounded(answer, entry["answer"]):
+        result["rejectionReason"] = "ungrounded_answer"
+        return
+    result["accepted"] = True
+    result["fallback"] = False
+    result["servedAnswer"] = answer
+    result["rejectionReason"] = None
+
+
 def benchmark_case(model: str, entry: dict[str, str], language: str, key: str) -> dict:
-    payload = {"contents": [{"parts": [{"text": prompt(entry, language)}]}],
-               "generationConfig": {"maxOutputTokens": 220, "temperature": 0.1,
-                                    "responseMimeType": "application/json"}}
+    payload = generation_payload(entry, language)
     start = time.perf_counter()
     result = {"httpStatus": None, "latencyMs": None, "generatedAnswer": None,
               "servedAnswer": entry["answer"], "citationCorrect": False, "accepted": False,
               "fallback": True, "promptTokens": None, "candidateTokens": None, "totalTokens": None,
-              "finishReason": None, "humanScores": {"factualCorrectness": None,
+              "finishReason": None, "rejectionReason": None, "humanScores": {"factualCorrectness": None,
               "relevance": None, "completeness": None, "simplicity": None, "languageQuality": None}}
     try:
         response = request_json(API + "/" + model + ":generateContent", key, payload, 8)
         result["httpStatus"] = 200
-        usage = response.get("usageMetadata", {})
-        for field, api_field in (("promptTokens", "promptTokenCount"),
-                                 ("candidateTokens", "candidatesTokenCount"),
-                                 ("totalTokens", "totalTokenCount")):
-            result[field] = usage.get(api_field)
-        candidate = response.get("candidates", [{}])[0]
-        result["finishReason"] = candidate.get("finishReason")
-        raw = candidate.get("content", {}).get("parts", [{}])[0].get("text", "")
-        parsed = json.loads(raw)
-        answer = parsed.get("answer")
-        citations = parsed.get("sourceIds")
-        result["citationCorrect"] = citations == [entry["id"]]
-        if isinstance(answer, str):
-            result["generatedAnswer"] = answer
-            result["accepted"] = (result["citationCorrect"] and 0 < len(answer.strip()) <= 700
-                                  and "http://" not in answer and "https://" not in answer
-                                  and grounded(answer.strip(), entry["answer"]))
-            if result["accepted"]:
-                result["servedAnswer"] = answer.strip()
-                result["fallback"] = False
+        validate_response(response, entry, result)
     except HTTPError as error:
         result["httpStatus"] = error.code
-    except (URLError, TimeoutError, ValueError, IndexError, KeyError, TypeError):
-        if result["httpStatus"] is None:
-            result["httpStatus"] = "network_error"
+        result["rejectionReason"] = "http_error"
+    except (URLError, TimeoutError, OSError):
+        result["httpStatus"] = "network_error"
+        result["rejectionReason"] = "network_error"
+    except ValueError:
+        result["httpStatus"] = "invalid_json"
+        result["rejectionReason"] = "invalid_response_json"
     finally:
         result["latencyMs"] = round((time.perf_counter() - start) * 1000, 1)
     return result
+
+
+def summarize(rows: list[dict]) -> dict:
+    latencies = [row["latencyMs"] for row in rows if row["httpStatus"] == 200]
+    return {"requests": len(rows), "http200": sum(row["httpStatus"] == 200 for row in rows),
+            "accepted": sum(row["accepted"] for row in rows),
+            "fallbacks": sum(row["fallback"] for row in rows),
+            "citationCorrect": sum(row["citationCorrect"] for row in rows),
+            "medianLatencyMs": round(statistics.median(latencies), 1) if latencies else None,
+            "promptTokens": sum(row["promptTokens"] or 0 for row in rows),
+            "candidateTokens": sum(row["candidateTokens"] or 0 for row in rows),
+            "totalTokens": sum(row["totalTokens"] or 0 for row in rows)}
+
+
+def save_report(report: dict) -> None:
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=REPORT.parent,
+                                         prefix=".civicassist-benchmark-", suffix=".tmp", delete=False) as output:
+            temporary = Path(output.name)
+            json.dump(report, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        os.replace(temporary, REPORT)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -182,35 +278,35 @@ def main() -> int:
               "modelList": available, "models": {}, "limitations": ["Account billing tier requires user confirmation in AI Studio.",
               "Human quality scores are unfilled until a reviewer scores public answers.",
               "This direct API benchmark does not measure full application or browser latency."]}
-    for model in MODELS:
-        if not available.get(model, False):
-            report["models"][model] = {"unavailable": "Not listed with generateContent for this key"}
-            continue
-        rows = []
-        for identifier, language, scenario, previous in CASES:
-            entry = entries[identifier]
-            outcome = benchmark_case(model, entry, language, key)
-            rows.append({"caseId": identifier, "language": language, "scenario": scenario,
-                         "previousKnowledgeId": previous, "canonicalQuestion": entry["title"],
-                         "source": entry["source"], "approvedAnswer": entry["answer"], **outcome})
-            if outcome["httpStatus"] == 429:
-                report["limitations"].append("Stopped after HTTP 429 to preserve free quota.")
+    save_report(report)
+    try:
+        for model in MODELS:
+            if not available.get(model, False):
+                report["models"][model] = {"unavailable": "Not listed with generateContent for this key"}
+                save_report(report)
+                continue
+            rows: list[dict] = []
+            report["models"][model] = {"cases": rows, "summary": summarize(rows)}
+            save_report(report)
+            for identifier, language, scenario, previous in CASES:
+                entry = entries[identifier]
+                outcome = benchmark_case(model, entry, language, key)
+                rows.append({"caseId": identifier, "language": language, "scenario": scenario,
+                             "previousKnowledgeId": previous, "canonicalQuestion": entry["title"],
+                             "source": entry["source"], "approvedAnswer": entry["answer"], **outcome})
+                report["models"][model]["summary"] = summarize(rows)
+                save_report(report)
+                if outcome["httpStatus"] == 429:
+                    report["limitations"].append("Stopped after HTTP 429 to preserve free quota.")
+                    break
+                time.sleep(2)
+            if rows and rows[-1]["httpStatus"] == 429:
                 break
-            time.sleep(2)
-        latencies = [row["latencyMs"] for row in rows if row["httpStatus"] == 200]
-        report["models"][model] = {"cases": rows, "summary": {
-            "requests": len(rows), "http200": sum(row["httpStatus"] == 200 for row in rows),
-            "accepted": sum(row["accepted"] for row in rows),
-            "fallbacks": sum(row["fallback"] for row in rows),
-            "citationCorrect": sum(row["citationCorrect"] for row in rows),
-            "medianLatencyMs": round(statistics.median(latencies), 1) if latencies else None,
-            "promptTokens": sum(row["promptTokens"] or 0 for row in rows),
-            "candidateTokens": sum(row["candidateTokens"] or 0 for row in rows),
-            "totalTokens": sum(row["totalTokens"] or 0 for row in rows)}}
-        if rows and rows[-1]["httpStatus"] == 429:
-            break
-    REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except KeyboardInterrupt:
+        report["limitations"].append("Interrupted; completed cases remain in this report.")
+        return 130
+    finally:
+        save_report(report)
     print("Saved public-output benchmark to", REPORT)
     for model, data in report["models"].items():
         print(model, data.get("summary", data.get("unavailable")))

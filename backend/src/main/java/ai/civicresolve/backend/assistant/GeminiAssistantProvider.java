@@ -29,6 +29,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class GeminiAssistantProvider implements AssistantProvider {
     private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{M}\\p{N}]+");
+    private static final Map<String, Object> RESPONSE_SCHEMA = Map.of(
+            "type", "object",
+            "properties", Map.of(
+                    "answer", Map.of("type", "string"),
+                    "sourceIds", Map.of("type", "array", "items", Map.of("type", "string"),
+                            "minItems", 1, "maxItems", 1)),
+            "required", List.of("answer", "sourceIds"),
+            "additionalProperties", false);
     private static final Set<String> MEANING_MARKERS = Set.of("no", "not", "never", "only", "must", "may",
             "can", "cannot", "should", "without", "except", "before", "after", "all", "every", "always",
             "नहीं", "केवल", "सिर्फ", "बिना", "ज़रूरी", "अनिवार्य");
@@ -107,7 +115,7 @@ public class GeminiAssistantProvider implements AssistantProvider {
             String body = mapper.writeValueAsString(Map.of("contents", new Object[]{
                     Map.of("parts", new Object[]{Map.of("text", prompt)})},
                     "generationConfig", Map.of("maxOutputTokens", 220, "temperature", 0.1,
-                            "responseMimeType", "application/json")));
+                            "responseMimeType", "application/json", "responseJsonSchema", RESPONSE_SCHEMA)));
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(endpoint)
                     .header("x-goog-api-key", key).header("Content-Type", "application/json")
@@ -118,14 +126,27 @@ public class GeminiAssistantProvider implements AssistantProvider {
                 failed(); return null;
             }
             JsonNode root = mapper.readTree(response.body());
+            if (root == null || !root.isObject()) { failed(); return null; }
             JsonNode candidates = root.path("candidates");
             if (!candidates.isArray() || candidates.isEmpty()) { failed(); return null; }
-            JsonNode parts = candidates.get(0).path("content").path("parts");
+            JsonNode candidate = candidates.get(0);
+            if (!candidate.isObject() || !"STOP".equals(candidate.path("finishReason").asText())) {
+                failed(); return null;
+            }
+            JsonNode content = candidate.path("content");
+            if (!content.isObject()) { failed(); return null; }
+            JsonNode parts = content.path("parts");
             if (!parts.isArray() || parts.isEmpty()) { failed(); return null; }
-            JsonNode result = mapper.readTree(parts.get(0).path("text").asText(""));
+            JsonNode part = parts.get(0);
+            if (!part.isObject() || !part.path("text").isTextual()) { failed(); return null; }
+            JsonNode result = mapper.readTree(part.path("text").asText());
+            if (result == null || !result.isObject()) { failed(); return null; }
             JsonNode sourceIds = result.path("sourceIds");
-            String answer = result.path("answer").asText("").strip();
-            if (!sourceIds.isArray() || sourceIds.size() != 1 || !canonicalId.equals(sourceIds.get(0).asText())
+            JsonNode answerNode = result.path("answer");
+            if (!answerNode.isTextual() || !sourceIds.isArray() || sourceIds.size() != 1
+                    || !sourceIds.get(0).isTextual()) { failed(); return null; }
+            String answer = answerNode.asText().strip();
+            if (!canonicalId.equals(sourceIds.get(0).asText())
                     || answer.isBlank() || answer.length() > 700 || answer.contains("http://") || answer.contains("https://")
                     || !grounded(answer, approvedAnswer)) { failed(); return null; }
             failures.set(0);
